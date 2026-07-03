@@ -4,3 +4,7 @@
 # Local packaging output.
 /out/
 /dist/
+
+# CLion
+/.idea/
+/cmake-build-debug
