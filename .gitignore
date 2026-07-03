@@ -1,0 +1,6 @@
+# CMake out-of-tree build directory (produced by `make`).
+/build/
+
+# Local packaging output.
+/out/
+/dist/
