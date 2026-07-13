@@ -68,7 +68,7 @@ Sizes as generated (`DEFAULT_CALLBACK_SLOTS = 64` fallback; total 33094 slots �
 
 | Family | C signature | Slots | Dominant class | Peak distinct pointers | Margin |
 | --- | --- | ---: | --- | --- | --- |
-| `void_ptr_ptr` | `void(void*, void*)` | **32768** | per-instance | 2 × concurrent phantom shapes (+12 static) | bounds ~16384 concurrent phantoms |
+| `void_ptr_ptr` | `void(void*, void*)` | **32768** | per-instance | 2 × concurrent phantom shapes (+12 static) | bounds up to 16384 concurrent phantoms |
 | `void_ptr` | `void(void*)` | 128 | shared static | **7** | ~18× |
 | `void_ptr_int` | `void(void*, int32)` | 128 | static + per-call (sync) | 1 retained static + ≤1 per concurrent cleanup call | sized for loader concurrency |
 | `void_charptr` | `void(char*)` | 32 | shared static | 2 | 16× |
