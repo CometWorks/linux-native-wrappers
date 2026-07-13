@@ -61,13 +61,15 @@ in the generator sizes each family to its worst case. The size a family needs
 depends entirely on how the game's Havok wrapper marshals that callback:
 
 - **Shared `static` delegates** — entity/contact/sound listeners, constraint and
-  activation listeners, wheel modifiers, break-off handlers, the task profiler
-  and the log sink all hold their native delegate in a `static readonly` field
-  and dispatch per-instance via the listener handle passed as the first argument.
-  These marshal to a *single* pointer no matter how many grids, blocks or
-  constraints exist, so each is sized to its tiny fixed peak: a family with exactly
-  one such pointer collapses to a **single-slot** bridge (no map/free-list), and a
-  family with a few gets the smallest power of two ≥ 16× that peak.
+  activation listeners, wheel modifiers, break-off handlers and the log sink all
+  hold their native delegate in a `static readonly` field and dispatch per-instance
+  via the listener handle passed as the first argument. These marshal to a *single*
+  pointer no matter how many grids, blocks or constraints exist, so each is sized to
+  its tiny fixed peak: a family with exactly one such pointer collapses to a
+  **single-slot** bridge (no map/free-list), and a family with a few gets the
+  smallest power of two ≥ 16× that peak. (Note: a `static` *method* passed as a bare
+  method-group argument is **not** in this class — the game does not cache that
+  conversion, so it marshals a fresh pointer each time; see the doc.)
 - **Per-instance delegates** — `HkPhantomCallbackShape` is the only wrapper that
   marshals a *fresh* native delegate per instance: every live phantom shape burns
   2 `void_ptr_ptr` slots (enter/leave). The game creates one phantom shape per
@@ -81,8 +83,12 @@ depends entirely on how the game's Havok wrapper marshals that callback:
 - **Per-call synchronous delegates** — `HkShapeLoader` buffer cleanup marshals a
   fresh callback per call that Havok invokes only during the call, so the wrapper
   releases its slot right after (no leak), sizing it for loader concurrency (128).
-  `HkConstraint.FindConnectedConstraints` turned out to pass a shared static method,
-  so it dedups to one slot. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
+  `HkConstraint.FindConnectedConstraints` is the same: its `reader` is a bare
+  method-group (`ConstraintReader`) that marshals a **fresh** pointer per world load,
+  so bridging it without release pinned the first load's thunk and aborted on the
+  second world load. It is now released after each (synchronous) call and given a
+  128-slot pool. The dormant `HkTaskProfiler` callbacks are a latent copy of the same
+  pattern. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
 
 This keeps `libHavok.so` at ~17 MB (versus ~180 MB if every family used 32768).
 If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
