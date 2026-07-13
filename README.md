@@ -126,17 +126,23 @@ make clean    # wipe the build/ directory
 ## Releases
 
 CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on
-every push and publishes the four libraries as a `linux-native-wrappers.tar.gz`
-asset:
+every push and publishes the four libraries in two configurations, as two
+separate assets on the same release:
+
+| Asset                                | Configuration        |
+| ------------------------------------ | -------------------- |
+| `linux-native-wrappers.tar.gz`       | Release (`-O3 -DNDEBUG`) |
+| `linux-native-wrappers.debug.tar.gz` | Debug (`-O0 -g`)     |
 
 - **Push to `main`** → a public release tagged `v1.0.<run>` and marked *latest*.
 - **PR** → a **draft** release (not public, not *latest*,
   no git tag until published).
 - **Draft PRs** are not built.
 
-The build process of Pulsar for Linux and Magnetar download the 
-`linux-native-wrappers.tar.gz` asset from the latest release;
-it contains the four `.so` files at the archive root.
+The build process of Pulsar for Linux and Magnetar download the
+`linux-native-wrappers.tar.gz` (Release) asset from the latest release;
+each archive contains the four `.so` files at its root. The `.debug` variant
+carries unoptimized, symbol-rich builds for debugging.
 
 ## License
 

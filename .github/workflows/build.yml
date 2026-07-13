@@ -6,17 +6,26 @@ name: Build
 # consume the resulting archive.
 #
 #   * push to main        -> build, then publish a PUBLIC release tagged
-#                            v1.0.<run_number> and marked "latest". The
-#                            tar.gz asset is attached.
+#                            v1.0.<run_number> and marked "latest". Both
+#                            tar.gz assets are attached.
 #   * push to a (non-draft)
 #     pull request         -> build, then publish a DRAFT release (not public,
 #                            not "latest", no git tag is created until/unless a
-#                            maintainer publishes it). Same asset otherwise.
+#                            maintainer publishes it). Same assets otherwise.
 #   * draft pull requests  -> skipped entirely (no build, no release).
 #
-# The build toolchain (ubuntu 24.04 + build-essential/cmake/make/g++, `make`
-# running `cmake --preset default`) is identical to the Docker-based build that
-# Magnetar currently uses, so the binaries are interchangeable.
+# Two configurations are built and published as separate assets:
+#
+#   * Release (-O3 -DNDEBUG) -> linux-native-wrappers.tar.gz       (primary)
+#   * Debug   (-O0 -g)       -> linux-native-wrappers.debug.tar.gz
+#
+# Both are attached to the same release; consumers (Pulsar for Linux, Magnetar)
+# pull the release asset by name, so the Release archive keeps the historical
+# filename and the Debug archive gets the `.debug` variant name.
+#
+# The build toolchain (ubuntu 24.04 + build-essential/cmake/make/g++) is
+# identical to the Docker-based build that Magnetar currently uses, so the
+# binaries are interchangeable.
 
 on:
   push:
@@ -43,38 +52,47 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake make g++
 
-      - name: Build native wrappers
+      - name: Build and package native wrappers (Release + Debug)
         run: |
           set -euo pipefail
-          # `make` runs `cmake --preset default` then `cmake --build --preset
-          # default`, writing the four wrapper .so files into ./build.
-          make
-          echo "Built:"
-          ls -l build/*.so
-
-      - name: Package tar.gz (wrapper libraries only)
-        run: |
-          set -euo pipefail
-          mkdir -p out dist
+          mkdir -p dist
           # Pulsar for Linux needs all four wrappers (Magnetar uses only three).
           libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so"
-          for lib in $libs; do
-            if [ ! -f "build/$lib" ]; then
-              echo "ERROR: expected build output build/$lib is missing." >&2
-              exit 1
-            fi
-            install -m 0755 "build/$lib" "out/$lib"
-          done
-          # Archive the .so files only, at the root of the tarball.
-          tar -czf dist/linux-native-wrappers.tar.gz -C out $libs
-          echo "Packaged:"
-          tar -tzf dist/linux-native-wrappers.tar.gz
+          # Build each configuration into its own tree and archive the four
+          # .so files at the root of a tarball. Release keeps the historical
+          # asset name; Debug gets the `.debug` variant name.
+          build_config() {
+            local build_type="$1" archive="$2"
+            local build_dir="build-${build_type,,}"
+            echo "::group::Build ${build_type}"
+            cmake -S . -B "$build_dir" -G "Unix Makefiles" \
+              -DCMAKE_BUILD_TYPE="$build_type"
+            cmake --build "$build_dir" -j "$(nproc)"
+            echo "::endgroup::"
+            local out="out-${build_type,,}"
+            mkdir -p "$out"
+            for lib in $libs; do
+              if [ ! -f "$build_dir/$lib" ]; then
+                echo "ERROR: expected build output $build_dir/$lib is missing." >&2
+                exit 1
+              fi
+              install -m 0755 "$build_dir/$lib" "$out/$lib"
+            done
+            tar -czf "dist/$archive" -C "$out" $libs
+            echo "Packaged $archive (${build_type}):"
+            tar -tzf "dist/$archive"
+            ls -l "$out"/*.so
+          }
+          build_config Release linux-native-wrappers.tar.gz
+          build_config Debug   linux-native-wrappers.debug.tar.gz
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: linux-native-wrappers
-          path: dist/linux-native-wrappers.tar.gz
+          path: |
+            dist/linux-native-wrappers.tar.gz
+            dist/linux-native-wrappers.debug.tar.gz
           if-no-files-found: error
 
       - name: Publish release
@@ -82,7 +100,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          asset="dist/linux-native-wrappers.tar.gz"
+          assets=(
+            "dist/linux-native-wrappers.tar.gz"
+            "dist/linux-native-wrappers.debug.tar.gz"
+          )
 
           if [ "${{ github.event_name }}" = "push" ]; then
             # Push to main -> public, tagged, latest.
@@ -93,7 +114,7 @@ jobs:
               --target "${{ github.sha }}" \
               --title "Linux Native Wrappers $tag" \
               --notes "Automated build of the Linux native wrapper libraries from commit ${{ github.sha }}." \
-              "$asset"
+              "${assets[@]}"
           else
             # Non-draft PR -> draft release: not public, not latest, and no git
             # tag is created until a maintainer publishes it. One draft is kept
@@ -106,5 +127,5 @@ jobs:
               --draft \
               --title "Linux Native Wrappers (PR #${{ github.event.pull_request.number }})" \
               --notes "Draft build for PR #${{ github.event.pull_request.number }} (commit ${{ github.event.pull_request.head.sha }})." \
-              "$asset"
+              "${assets[@]}"
           fi
