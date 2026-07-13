@@ -32,6 +32,9 @@ family there is a pool of `CALLBACK_SLOTS` template-instantiated thunks
 Invoking a callback is a single lock-free atomic load; registering and releasing
 one (`bridge_*` / `release_*`) is O(1) via an index map plus a free-list of slots.
 
+The full per-family mapping, sizing rationale, limits and margins are documented in
+[`docs/havok-callback-bridge.md`](docs/havok-callback-bridge.md).
+
 Those thunk addresses are baked into the binary at compile time, so **the pool
 size is fixed per build and cannot be grown at run time** (doing so would require
 emitting machine code / JIT trampolines, which is architecture-specific and out
