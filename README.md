@@ -65,8 +65,9 @@ depends entirely on how the game's Havok wrapper marshals that callback:
   and the log sink all hold their native delegate in a `static readonly` field
   and dispatch per-instance via the listener handle passed as the first argument.
   These marshal to a *single* pointer no matter how many grids, blocks or
-  constraints exist, so they need only a handful of slots
-  (`DEFAULT_CALLBACK_SLOTS = 256`).
+  constraints exist, so each is sized to its tiny fixed peak: a family with exactly
+  one such pointer collapses to a **single-slot** bridge (no map/free-list), and a
+  family with a few gets the smallest power of two ≥ 16× that peak.
 - **Per-instance delegates** — `HkPhantomCallbackShape` is the only wrapper that
   marshals a *fresh* native delegate per instance: every live phantom shape burns
   2 `void_ptr_ptr` slots (enter/leave). The game creates one phantom shape per
@@ -79,11 +80,11 @@ depends entirely on how the game's Havok wrapper marshals that callback:
   cumulative total ever created.
 - **Per-call synchronous delegates** — `HkShapeLoader` buffer cleanup marshals a
   fresh callback per call that Havok invokes only during the call, so the wrapper
-  releases its slot right after (no leak). `HkConstraint.FindConnectedConstraints`
-  turned out to pass a shared static method, so it dedups to one slot. Both stay at
-  the default 256. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
+  releases its slot right after (no leak), sizing it for loader concurrency (128).
+  `HkConstraint.FindConnectedConstraints` turned out to pass a shared static method,
+  so it dedups to one slot. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
 
-This keeps `libHavok.so` at ~19 MB (versus ~180 MB if every family used 32768).
+This keeps `libHavok.so` at ~17 MB (versus ~180 MB if every family used 32768).
 If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
 offending family and pointing back at the generator, then aborts; raise that
 family's entry in `CALLBACK_SLOTS`, regenerate, and rebuild. Run-time growth is

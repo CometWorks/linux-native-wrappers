@@ -136,36 +136,48 @@ FAMILY_SIGNATURES = {
 }
 
 # Per-family bridge slot counts. Each slot is one compile-time-instantiated thunk,
-# so the count is baked into every generated source and fixed for the lifetime of
-# the build; growing the pool at run time is not practical (it would need JIT
-# trampolines). Each family is sized to its worst case rather than sharing one
-# large pool, because slot demand depends on how the wrapper marshals the delegate:
+# baked into the generated source and fixed per build (no run-time growth without
+# JIT trampolines), so each family is sized to its worst-case peak of *distinct
+# concurrently-live* callback pointers. That peak depends on how the game's wrapper
+# marshals the delegate (see docs/HavokCallbackBridge.md):
 #
-#   * static readonly delegates (entity/contact/sound/constraint/activation
-#     listeners, wheel modifier, break-off, task profiler, log) marshal to ONE
-#     shared pointer regardless of instance count (dispatch is via the listener
-#     handle passed as arg0) -> a handful of slots (DEFAULT_CALLBACK_SLOTS).
-#   * HkPhantomCallbackShape is the ONLY producer that marshals PER-INSTANCE
-#     native delegates: each live phantom shape uses 2 void_ptr_ptr slots
-#     (enter/leave). The game makes one per trigger/detector volume (ship
-#     connectors + ejectors, collectors, gravity generators, merge blocks, safe
-#     zones), so void_ptr_ptr scales with block count -> 32768. The phantom-slot
-#     reclaim (see OWNER_HELPERS) frees these when a shape is destroyed, so 32768
-#     bounds *concurrent* live phantoms, not the cumulative total ever created.
-#     The phantom delete callback is NOT bridged (Havok is given one shared
-#     dispatcher), so void_ptr has no per-instance producer and stays at default.
-#
-# The two families that looked "per-call" both stay at the default too:
-#   * void_ptr_int: HkShapeLoader cleanup marshals a fresh callback per call, but
-#     Havok calls it only synchronously, so the wrapper releases the slot right
-#     after the call (see SYNC_RELEASE_ARGS). Its other producer (the voxel batch
-#     handler) is a shared static delegate -> one deduplicated slot.
-#   * void_ptr_int_ptr: HkConstraint.FindConnectedConstraints' reader is a shared
-#     static method (ConstraintReader), so it dedups to a single slot.
-DEFAULT_CALLBACK_SLOTS = 256
+#   * A delegate held in a `static readonly` field marshals to ONE shared pointer
+#     regardless of instance count (dispatch is via the handle passed as arg0), so
+#     families whose producers are all static have a tiny fixed peak:
+#       - exactly one distinct pointer -> a single slot (collapsed, non-collection
+#         bridge; see emit_bridge_single)
+#       - a few distinct pointers      -> smallest power of two >= 16x that peak
+#   * HkPhantomCallbackShape is the ONLY per-instance producer: 2 void_ptr_ptr slots
+#     (enter/leave) per live phantom shape. The game makes one per trigger/detector
+#     volume (connectors + ejectors, collectors, gravity generators, merge blocks,
+#     safe zones), so void_ptr_ptr scales with block count -> 32768. The reclaim
+#     (see OWNER_HELPERS) frees these on shape destruction, so 32768 bounds the
+#     *concurrent* live phantom count. The delete callback is NOT bridged (one
+#     shared dispatcher), so void_ptr has no per-instance producer.
+#   * void_ptr_int also carries a fresh per-call callback (HkShapeLoader cleanup)
+#     that Havok invokes only synchronously, so its slot is released right after the
+#     call (see SYNC_RELEASE_ARGS); it is sized for loader concurrency, not a fixed
+#     static count.
+DEFAULT_CALLBACK_SLOTS = 64
 
 CALLBACK_SLOTS = {
-    'void_ptr_ptr':      32768,  # 2 per live HkPhantomCallbackShape (enter/leave), reclaimed on destroy
+    # per-instance, reclaimed on destroy -> bounds concurrent live phantom shapes
+    'void_ptr_ptr':         32768,
+    # peak 7 static pointers (2 activation + 3 constraint + jobpool + uniformgrid delete) -> 16x -> 128
+    'void_ptr':             128,
+    # 1 retained static (voxel batch handler) + released-after-call transients; sized for loader concurrency
+    'void_ptr_int':         128,
+    # peak 2 static pointers (log + profiler block-begin) -> 16x -> 32
+    'void_charptr':         32,
+    # peak 2 static pointers (wheel softness + acceleration) -> 16x -> 32
+    'float_ptr':            32,
+    # exactly 1 static pointer each -> single collapsed slot (see emit_bridge_single)
+    'void_charptr_int':     1,  # HkTaskProfiler.TaskStartedFuncCpp
+    'void_i64':             1,  # HkTaskProfiler.BlockEndFunc
+    'void_void':            1,  # HkTaskProfiler.TaskFinishedFunc
+    'bool_ptr_ptr':         1,  # HkBreakOffPartsUtil.BreakPartsHandler
+    'int_ptr_ptr_uint_ptr': 1,  # HkBreakOffPartsUtil.BreakLogicHandler
+    'void_ptr_int_ptr':     1,  # HkConstraint ConstraintReader (static method group)
 }
 
 
@@ -506,8 +518,88 @@ def emit_thunk_header(families):
     return '\n'.join(lines)
 
 
+def emit_bridge_single(name: str, ret: str, params: str, args: str):
+    # A family that only ever sees a single distinct callback pointer gets a
+    # collapsed bridge: one thunk backed by one target, with no index map, free-list
+    # or thunk array. A second distinct *live* target aborts -- it would mean the
+    # family was mis-sized and should be given a multi-slot pool in CALLBACK_SLOTS.
+    sysv_type = f'{name}_sysv_t'
+    lines = [
+        GENERATED_BANNER + THUNK_CPP_PREAMBLE,
+        f'using {sysv_type} = {ret} (*)({params});',
+        f'static std::mutex {name}_mutex;',
+        '',
+        '// Single-slot family: one target read lock-free by the thunk (acquire) and',
+        '// published under the mutex (release). No collection -- just this pointer.',
+        f'static std::atomic_uintptr_t {name}_target = 0;',
+        f'static uint32_t {name}_refcount = 0;  // guarded by {name}_mutex',
+        '',
+        f'static {ret} WINAPI {name}_thunk({params})',
+        '{',
+        f'    auto fn = reinterpret_cast<{sysv_type}>({name}_target.load(std::memory_order_acquire));',
+    ]
+    if ret == 'void':
+        lines += [
+            '    if (!fn) {',
+            '        return;',
+            '    }',
+            f'    fn({args});' if args else '    fn();',
+        ]
+    else:
+        lines += [
+            '    if (!fn) {',
+            f'        return {ret}{{}};',
+            '    }',
+            f'    return fn({args});' if args else '    return fn();',
+        ]
+    lines += [
+        '}',
+        '',
+        f'void *bridge_{name}(void *target_ptr)',
+        '{',
+        '    if (!target_ptr) {',
+        '        return nullptr;',
+        '    }',
+        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
+        f'    auto current = {name}_target.load(std::memory_order_acquire);',
+        '    if (current == 0) {',
+        f'        {name}_target.store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);',
+        f'        {name}_refcount = 1;',
+        f'    }} else if (current == reinterpret_cast<uintptr_t>(target_ptr)) {{',
+        f'        ++{name}_refcount;',
+        '    } else {',
+        '        fprintf(stderr,',
+        f'                "FATAL: Havok callback bridge single-slot family \'{name}\' received a\\n"',
+        '                "  second distinct target while the first was still live. It was sized for one\\n"',
+        '                "  callback pointer; give it a multi-slot pool in CALLBACK_SLOTS in\\n"',
+        '                "  tools/generate_havok_wrapper.py, regenerate, and rebuild.\\n");',
+        '        std::abort();',
+        '    }',
+        f'    return reinterpret_cast<void *>(&{name}_thunk);',
+        '}',
+        '',
+        f'void release_{name}(void *target_ptr)',
+        '{',
+        '    if (!target_ptr) {',
+        '        return;',
+        '    }',
+        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
+        f'    if ({name}_target.load(std::memory_order_acquire) != reinterpret_cast<uintptr_t>(target_ptr)) {{',
+        '        return;',
+        '    }',
+        f'    if ({name}_refcount > 0 && --{name}_refcount == 0) {{',
+        f'        {name}_target.store(0, std::memory_order_release);',
+        '    }',
+        '}',
+        '',
+    ]
+    return lines
+
+
 def emit_bridge_family(name: str, ret: str, params: str, args: str):
     slots = slots_for(name)
+    if slots == 1:
+        return emit_bridge_single(name, ret, params, args)
     sysv_type = f'{name}_sysv_t'
     ms_type = f'{name}_ms_t'
     thunk_params = params

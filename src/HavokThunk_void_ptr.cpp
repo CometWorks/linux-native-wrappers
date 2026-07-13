@@ -29,7 +29,7 @@ static std::mutex void_ptr_mutex;
 // bridge()/release() (release) under the mutex. Slot management (dedup +
 // allocation) is O(1): an index map for dedup and a free-list stack for
 // allocation, both touched only under the mutex, never by the thunks.
-static std::atomic_uintptr_t void_ptr_targets[256] = {};
+static std::atomic_uintptr_t void_ptr_targets[128] = {};
 struct void_ptr_slot { uint32_t index; uint32_t refs; };
 static std::unordered_map<void *, void_ptr_slot> void_ptr_index;
 static std::vector<uint32_t> void_ptr_free_slots;
@@ -46,7 +46,7 @@ static void WINAPI void_ptr_thunk(void* arg0)
     fn(arg0);
 }
 
-static void_ptr_ms_t void_ptr_thunks[256] = {
+static void_ptr_ms_t void_ptr_thunks[128] = {
     &void_ptr_thunk<0>,
     &void_ptr_thunk<1>,
     &void_ptr_thunk<2>,
@@ -174,135 +174,7 @@ static void_ptr_ms_t void_ptr_thunks[256] = {
     &void_ptr_thunk<124>,
     &void_ptr_thunk<125>,
     &void_ptr_thunk<126>,
-    &void_ptr_thunk<127>,
-    &void_ptr_thunk<128>,
-    &void_ptr_thunk<129>,
-    &void_ptr_thunk<130>,
-    &void_ptr_thunk<131>,
-    &void_ptr_thunk<132>,
-    &void_ptr_thunk<133>,
-    &void_ptr_thunk<134>,
-    &void_ptr_thunk<135>,
-    &void_ptr_thunk<136>,
-    &void_ptr_thunk<137>,
-    &void_ptr_thunk<138>,
-    &void_ptr_thunk<139>,
-    &void_ptr_thunk<140>,
-    &void_ptr_thunk<141>,
-    &void_ptr_thunk<142>,
-    &void_ptr_thunk<143>,
-    &void_ptr_thunk<144>,
-    &void_ptr_thunk<145>,
-    &void_ptr_thunk<146>,
-    &void_ptr_thunk<147>,
-    &void_ptr_thunk<148>,
-    &void_ptr_thunk<149>,
-    &void_ptr_thunk<150>,
-    &void_ptr_thunk<151>,
-    &void_ptr_thunk<152>,
-    &void_ptr_thunk<153>,
-    &void_ptr_thunk<154>,
-    &void_ptr_thunk<155>,
-    &void_ptr_thunk<156>,
-    &void_ptr_thunk<157>,
-    &void_ptr_thunk<158>,
-    &void_ptr_thunk<159>,
-    &void_ptr_thunk<160>,
-    &void_ptr_thunk<161>,
-    &void_ptr_thunk<162>,
-    &void_ptr_thunk<163>,
-    &void_ptr_thunk<164>,
-    &void_ptr_thunk<165>,
-    &void_ptr_thunk<166>,
-    &void_ptr_thunk<167>,
-    &void_ptr_thunk<168>,
-    &void_ptr_thunk<169>,
-    &void_ptr_thunk<170>,
-    &void_ptr_thunk<171>,
-    &void_ptr_thunk<172>,
-    &void_ptr_thunk<173>,
-    &void_ptr_thunk<174>,
-    &void_ptr_thunk<175>,
-    &void_ptr_thunk<176>,
-    &void_ptr_thunk<177>,
-    &void_ptr_thunk<178>,
-    &void_ptr_thunk<179>,
-    &void_ptr_thunk<180>,
-    &void_ptr_thunk<181>,
-    &void_ptr_thunk<182>,
-    &void_ptr_thunk<183>,
-    &void_ptr_thunk<184>,
-    &void_ptr_thunk<185>,
-    &void_ptr_thunk<186>,
-    &void_ptr_thunk<187>,
-    &void_ptr_thunk<188>,
-    &void_ptr_thunk<189>,
-    &void_ptr_thunk<190>,
-    &void_ptr_thunk<191>,
-    &void_ptr_thunk<192>,
-    &void_ptr_thunk<193>,
-    &void_ptr_thunk<194>,
-    &void_ptr_thunk<195>,
-    &void_ptr_thunk<196>,
-    &void_ptr_thunk<197>,
-    &void_ptr_thunk<198>,
-    &void_ptr_thunk<199>,
-    &void_ptr_thunk<200>,
-    &void_ptr_thunk<201>,
-    &void_ptr_thunk<202>,
-    &void_ptr_thunk<203>,
-    &void_ptr_thunk<204>,
-    &void_ptr_thunk<205>,
-    &void_ptr_thunk<206>,
-    &void_ptr_thunk<207>,
-    &void_ptr_thunk<208>,
-    &void_ptr_thunk<209>,
-    &void_ptr_thunk<210>,
-    &void_ptr_thunk<211>,
-    &void_ptr_thunk<212>,
-    &void_ptr_thunk<213>,
-    &void_ptr_thunk<214>,
-    &void_ptr_thunk<215>,
-    &void_ptr_thunk<216>,
-    &void_ptr_thunk<217>,
-    &void_ptr_thunk<218>,
-    &void_ptr_thunk<219>,
-    &void_ptr_thunk<220>,
-    &void_ptr_thunk<221>,
-    &void_ptr_thunk<222>,
-    &void_ptr_thunk<223>,
-    &void_ptr_thunk<224>,
-    &void_ptr_thunk<225>,
-    &void_ptr_thunk<226>,
-    &void_ptr_thunk<227>,
-    &void_ptr_thunk<228>,
-    &void_ptr_thunk<229>,
-    &void_ptr_thunk<230>,
-    &void_ptr_thunk<231>,
-    &void_ptr_thunk<232>,
-    &void_ptr_thunk<233>,
-    &void_ptr_thunk<234>,
-    &void_ptr_thunk<235>,
-    &void_ptr_thunk<236>,
-    &void_ptr_thunk<237>,
-    &void_ptr_thunk<238>,
-    &void_ptr_thunk<239>,
-    &void_ptr_thunk<240>,
-    &void_ptr_thunk<241>,
-    &void_ptr_thunk<242>,
-    &void_ptr_thunk<243>,
-    &void_ptr_thunk<244>,
-    &void_ptr_thunk<245>,
-    &void_ptr_thunk<246>,
-    &void_ptr_thunk<247>,
-    &void_ptr_thunk<248>,
-    &void_ptr_thunk<249>,
-    &void_ptr_thunk<250>,
-    &void_ptr_thunk<251>,
-    &void_ptr_thunk<252>,
-    &void_ptr_thunk<253>,
-    &void_ptr_thunk<254>,
-    &void_ptr_thunk<255>
+    &void_ptr_thunk<127>
 };
 
 void *bridge_void_ptr(void *target_ptr)
@@ -320,15 +192,15 @@ void *bridge_void_ptr(void *target_ptr)
     if (!void_ptr_free_slots.empty()) {
         index = void_ptr_free_slots.back();
         void_ptr_free_slots.pop_back();
-    } else if (void_ptr_high_water < 256) {
+    } else if (void_ptr_high_water < 128) {
         index = void_ptr_high_water++;
     } else {
         fprintf(stderr,
                 "FATAL: Havok callback bridge pool exhausted for the 'void_ptr' signature family:\n"
-                "  All 256 bridge slots are in use. Every distinct live native callback of this\n"
+                "  All 128 bridge slots are in use. Every distinct live native callback of this\n"
                 "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
                 "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
-                "  Fix: raise this family in CALLBACK_SLOTS (currently 256) in tools/generate_havok_wrapper.py,\n"
+                "  Fix: raise this family in CALLBACK_SLOTS (currently 128) in tools/generate_havok_wrapper.py,\n"
                 "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\n");
         std::abort();
     }
