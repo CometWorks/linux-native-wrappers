@@ -77,12 +77,13 @@ depends entirely on how the game's Havok wrapper marshals that callback:
   and aborted. These slots are **reclaimed when the shape is destroyed** (see
   below), so 32768 bounds the *concurrent* number of live phantoms, not the
   cumulative total ever created.
-- **Fresh-per-call delegates** — `HkShapeLoader` buffer cleanup and
-  `HkConstraint.FindConnectedConstraints` marshal a new, never-released callback
-  on each call, so `void_ptr_int` and `void_ptr_int_ptr` get a **4096** safety
-  margin above the default.
+- **Per-call synchronous delegates** — `HkShapeLoader` buffer cleanup marshals a
+  fresh callback per call that Havok invokes only during the call, so the wrapper
+  releases its slot right after (no leak). `HkConstraint.FindConnectedConstraints`
+  turned out to pass a shared static method, so it dedups to one slot. Both stay at
+  the default 256. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
 
-This keeps `libHavok.so` at ~22 MB (versus ~180 MB if every family used 32768).
+This keeps `libHavok.so` at ~19 MB (versus ~180 MB if every family used 32768).
 If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
 offending family and pointing back at the generator, then aborts; raise that
 family's entry in `CALLBACK_SLOTS`, regenerate, and rebuild. Run-time growth is

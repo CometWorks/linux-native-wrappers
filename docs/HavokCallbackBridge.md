@@ -44,25 +44,28 @@ marshals the delegate. There are three classes:
 | --- | --- | --- | --- |
 | **Shared static** | delegate held in a `static readonly` field; per-instance dispatch happens via the listener *handle* passed as the callback's first argument | one per distinct static delegate, **independent of world size** | default (256) |
 | **Per-instance** | a fresh delegate is marshalled for every wrapper instance | one per live instance | large, sized to the concurrent instance count |
-| **Per-call** | a fresh (often capturing) delegate is marshalled on each call and never released | grows with call count (a slow leak) | a runway margin above the default |
+| **Per-call (synchronous)** | a fresh (often capturing) delegate is marshalled on each call, but Havok invokes it *only during the call* and never retains it | the wrapper releases the slot right after the call, so ≤ one per concurrent call | default (256) |
 
 Because the bridge de-duplicates by target pointer, a shared static delegate that is
-bridged from thousands of listeners still occupies **one** slot (refcounted). Only
-per-instance and per-call producers actually accumulate slots.
+bridged from thousands of listeners still occupies **one** slot (refcounted). A
+per-instance producer accumulates slots until the instance dies; a per-call
+producer would leak one slot per call *unless* its slot is released — which is safe
+only when Havok does not retain the pointer past the call (see
+[Per-call release](#per-call-release)).
 
 `HkPhantomCallbackShape` is the **only** per-instance producer in the entire wrapper
 (see [Phantom-shape reclaim](#phantom-shape-reclaim) below).
 
 ## Per-family table
 
-Sizes as generated (`DEFAULT_CALLBACK_SLOTS = 256`; total 43008 slots →
-`libHavok.so` ~22 MB):
+Sizes as generated (`DEFAULT_CALLBACK_SLOTS = 256`; total 35328 slots →
+`libHavok.so` ~19 MB):
 
 | Family | C signature | Slots | Dominant class | Peak distinct pointers | Margin |
 | --- | --- | ---: | --- | --- | --- |
-| `void_ptr_ptr` | `void(void*, void*)` | **32768** | per-instance | 2 × concurrent phantom shapes (+12 static) | bounds ~16 384 concurrent phantoms |
-| `void_ptr_int` | `void(void*, int32)` | 4096 | per-call | 1 static + N leaked per shape-buffer cleanup | runway |
-| `void_ptr_int_ptr` | `void(void*, int32, void*)` | 4096 | per-call | N leaked per `FindConnectedConstraints` | runway |
+| `void_ptr_ptr` | `void(void*, void*)` | **32768** | per-instance | 2 × concurrent phantom shapes (+12 static) | bounds ~16384 concurrent phantoms |
+| `void_ptr_int` | `void(void*, int32)` | 256 | static + per-call (sync) | 1 retained static + ≤1 per concurrent cleanup call | ~256× |
+| `void_ptr_int_ptr` | `void(void*, int32, void*)` | 256 | shared static | 1 | ~256× |
 | `void_ptr` | `void(void*)` | 256 | shared static | **7** | ~36× |
 | `void_charptr` | `void(char*)` | 256 | shared static | ~2 | ~128× |
 | `void_charptr_int` | `void(char*, int32)` | 256 | shared static | 1 | ~256× |
@@ -117,23 +120,36 @@ is a *concurrency* ceiling, not a cumulative-total one. Loading *"Many Lifters
 Slowness"* (699 grids) exhausted the earlier flat pool of 4096 and aborted; it peaks
 around a few thousand.
 
-### `void_ptr_int` — 4096 slots, per-call
+### `void_ptr_int` — 256 slots, static + per-call (synchronous)
 
-- `HkUniformGridShape.NativeBatchRequestCallback` → `BlockingRequestHandlerCallback`
-  (static, 1).
-- **Per-call:** `HkShapeLoader.ReturnByteArray` — `HkShapeLoader.CleanupShapesBuffer`
-  passes a fresh **capturing** lambda (it writes to a local `result`) on each call.
-  It is used synchronously and never released, so each call permanently consumes a
-  slot. `CleanupShapesBuffer` runs during shape/model loading, so this is a slow
-  drip bounded by distinct model-load operations, not by frame count. 4096 is a
-  runway (the value the family ran at historically without incident), not a margin
-  over a fixed number.
+Two consumers, and they are the reason this family is *not* a simple round-robin:
 
-### `void_ptr_int_ptr` — 4096 slots, per-call
+- **Retained static:** `HkUniformGridShape.NativeBatchRequestCallback` →
+  `BlockingRequestHandlerCallback`, installed via `HkUniformGridShape_SetShapeRequestHandler`.
+  Havok **keeps** this pointer and invokes it later, on demand, for lazy voxel-batch
+  loading — for the lifetime of the shape. It is a shared static delegate, so it
+  occupies **one** deduplicated slot, but that slot must never be recycled while the
+  shape is alive.
+- **Per-call synchronous:** `HkShapeLoader.ReturnByteArray` — `HkShapeLoader.CleanupShapesBuffer`
+  passes a fresh **capturing** lambda (it writes to a local `result`). Havok calls it
+  once during `CleanupShapesBuffer` to hand back the cleaned buffer, then discards it.
+  The wrapper therefore **releases the slot immediately after the call**, so it does
+  not leak (see [Per-call release](#per-call-release)).
+
+Because the retained handler and the per-call callback share this pool, blind
+round-robin reuse would eventually overwrite the retained slot and crash. Releasing
+only the synchronous callback (by target pointer) leaves the retained one untouched.
+Peak is 1 retained + one in-flight cleanup per concurrent caller — 256 is ample.
+
+### `void_ptr_int_ptr` — 256 slots, shared static
 
 - `HkConstraint.ReadConstraintsCallback` — the `reader` passed to
-  `HkConstraint_FindConnectedConstraints` is caller-supplied and not released. Occasional
-  (constraint-graph queries), so 4096 is a comfortable runway.
+  `HkConstraint_FindConnectedConstraints` is, at its one call site
+  (`HkConstraint.GetAttachedConstraints`), the `static` method `ConstraintReader`
+  (its state is threaded through `userData`/`GCHandle`, not captured). The C#
+  compiler caches a method-group→delegate conversion of a static method in a hidden
+  static field, so it is **one stable pointer, deduplicated to a single slot**. It is
+  not per-call and does not leak.
 
 ### Remaining shared-static families — 256 slots each
 
@@ -167,6 +183,26 @@ Two consequences:
 - The delete callback is no longer bridged, so `void_ptr` has **no** per-instance
   producer — that is why it sits at the default 256.
 
+## Per-call release
+
+A callback that Havok invokes *only synchronously during the call* and never retains
+can have its bridge slot freed the instant the call returns — the target is dead by
+then. The generator does this for functions listed in `SYNC_RELEASE_ARGS`: it emits
+`bridge_<family>(arg)` for the call, then `release_<family>(arg)` immediately after.
+Currently that is just `HkShapeLoader_CleanupShapesBuffer` (its `returnByteArray`
+callback). This keeps `void_ptr_int` at the default instead of leaking one slot per
+shape-buffer cleanup.
+
+**Why release-after-call rather than round-robin.** A round-robin buffer (recycle
+slot `i mod N`, trusting the delegate from `N` calls ago is dead) only works if
+*every* delegate in the family is short-lived. `void_ptr_int` violates that: it also
+carries the **retained** voxel batch handler (above), whose slot Havok may call into
+at any time. Round-robin would eventually recycle that live slot and crash. Releasing
+by target pointer, only for the callback we have verified is synchronous, is both
+safer (it never touches the retained slot) and tighter (the slot is freed at the
+exact moment it dies, not `N` calls later). Only add an argument to `SYNC_RELEASE_ARGS`
+after confirming in the C# wrapper that Havok does not store it past the call.
+
 ## Changing a limit
 
 Edit the family's entry in `CALLBACK_SLOTS` (or `DEFAULT_CALLBACK_SLOTS`) in
@@ -178,13 +214,14 @@ make
 ```
 
 Cost is linear in the slot count of the family you change (one templated thunk +
-one function pointer per slot). Measured for `void_ptr_ptr`:
+one function pointer per slot). For `void_ptr_ptr` (current row measured, others
+extrapolated ~linearly):
 
 | `void_ptr_ptr` slots | `libHavok.so` | clean build (`-O0`) |
 | ---: | ---: | ---: |
-| 16384 | ~15 MB | ~21 s |
-| 32768 (current) | ~22 MB | ~34 s |
-| 65536 | ~37 MB | ~47 s |
+| 16384 | ~12 MB | ~18 s |
+| 32768 (current) | ~19 MB | ~34 s |
+| 65536 | ~34 MB | ~47 s |
 
 **Runtime is unaffected by pool size** — register/lookup are O(1) and the invocation
 hot path is a single atomic load; a larger pool only enlarges the (mostly-zero)

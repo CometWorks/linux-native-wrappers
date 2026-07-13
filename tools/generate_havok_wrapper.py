@@ -154,14 +154,18 @@ FAMILY_SIGNATURES = {
 #     bounds *concurrent* live phantoms, not the cumulative total ever created.
 #     The phantom delete callback is NOT bridged (Havok is given one shared
 #     dispatcher), so void_ptr has no per-instance producer and stays at default.
-#   * HkShapeLoader cleanup and HkConstraint.FindConnectedConstraints marshal a
-#     fresh, never-released callback per call -> a 4096 margin above the default.
+#
+# The two families that looked "per-call" both stay at the default too:
+#   * void_ptr_int: HkShapeLoader cleanup marshals a fresh callback per call, but
+#     Havok calls it only synchronously, so the wrapper releases the slot right
+#     after the call (see SYNC_RELEASE_ARGS). Its other producer (the voxel batch
+#     handler) is a shared static delegate -> one deduplicated slot.
+#   * void_ptr_int_ptr: HkConstraint.FindConnectedConstraints' reader is a shared
+#     static method (ConstraintReader), so it dedups to a single slot.
 DEFAULT_CALLBACK_SLOTS = 256
 
 CALLBACK_SLOTS = {
     'void_ptr_ptr':      32768,  # 2 per live HkPhantomCallbackShape (enter/leave), reclaimed on destroy
-    'void_ptr_int':       4096,  # HkShapeLoader cleanup marshals a fresh callback per call
-    'void_ptr_int_ptr':   4096,  # HkConstraint.FindConnectedConstraints reader, per call
 }
 
 
@@ -191,6 +195,26 @@ OWNER_RELEASE_FUNCS = {
 # HkPhantomHandlerCpp / HkDeleteHandler argument order.
 PHANTOM_SHAPE_CREATE_FUNCS = {
     'HkPhantomCallbackShape_Create',
+}
+
+# Functions that marshal a fresh delegate on every call which Havok invokes only
+# *synchronously* during the call and never retains. Their bridge slot is released
+# as soon as the call returns, so the transient delegate does not leak a slot per
+# call (as opposed to a per-instance callback, which lives until its owner dies).
+# Only list an argument here after verifying in the C# wrapper that Havok does not
+# store the pointer past the call -- releasing a retained callback would free a
+# slot Havok still calls into. Maps function -> list of its delegate arg names.
+#
+#   * HkShapeLoader_CleanupShapesBuffer.returnByteArray: a capturing lambda that
+#     Havok calls once to hand back the cleaned buffer, then discards.
+# NOT included, and why:
+#   * HkUniformGridShape_SetShapeRequestHandler.blockingCallback: RETAINED -- Havok
+#     calls it later for lazy voxel-batch loading (it is a shared static delegate,
+#     so it occupies just one deduplicated slot anyway).
+#   * HkConstraint_FindConnectedConstraints.reader: a shared static method group
+#     (ConstraintReader), so it already dedups to a single slot; nothing to release.
+SYNC_RELEASE_ARGS = {
+    'HkShapeLoader_CleanupShapesBuffer': ['returnByteArray'],
 }
 
 EXPORT_ALIASES = {
@@ -718,6 +742,16 @@ def emit_wrapper(sig):
         release_target = sig['args'][0][1] if sig['args'] else 'nullptr'
         lines.append(f'    p{name}({arg_names});')
         lines.append(f'    release_callback_owner({release_target});')
+    elif name in SYNC_RELEASE_ARGS:
+        arg_family = {n: DELEGATE_FAMILIES.get(t) for t, n in sig['args']}
+        releases = [f'    release_{arg_family[a]}({a});' for a in SYNC_RELEASE_ARGS[name]]
+        if ret == 'void':
+            lines.append(f'    p{name}({arg_names});')
+            lines.extend(releases)
+        else:
+            lines.append(f'    auto result = p{name}({arg_names});')
+            lines.extend(releases)
+            lines.append('    return result;')
     elif ret == 'void':
         lines.append(f'    p{name}({arg_names});')
     else:

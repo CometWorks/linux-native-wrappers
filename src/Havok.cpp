@@ -6910,7 +6910,9 @@ bool HkShapeLoader_SaveShapesListToFile(const char* fileName, void* listShapes, 
 bool HkShapeLoader_CleanupShapesBuffer(int32_t cBuffer, void* buffer, void* returnByteArray) { EnsureThreadInfo();
     LOG_CALL(HkShapeLoader_CleanupShapesBuffer);
     REQUIRE_FUNCTION_POINTER(HkShapeLoader_CleanupShapesBuffer)
-    return pHkShapeLoader_CleanupShapesBuffer(cBuffer, buffer, bridge_void_ptr_int(returnByteArray));
+    auto result = pHkShapeLoader_CleanupShapesBuffer(cBuffer, buffer, bridge_void_ptr_int(returnByteArray));
+    release_void_ptr_int(returnByteArray);
+    return result;
 }
 
 void* HkSimpleMeshShape_Create(int32_t vCount, void* vertices, int32_t iCount, void* indices, int32_t mCount, void* materials) { EnsureThreadInfo();
