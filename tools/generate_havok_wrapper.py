@@ -167,6 +167,11 @@ CALLBACK_SLOTS = {
     'void_ptr':             128,
     # 1 retained static (voxel batch handler) + released-after-call transients; sized for loader concurrency
     'void_ptr_int':         128,
+    # ConstraintReader: a fresh native thunk per world load (the delegate is NOT a
+    # process-wide singleton), invoked only synchronously and released right after
+    # the call (see SYNC_RELEASE_ARGS), so it never accumulates across loads; sized
+    # for FindConnectedConstraints call concurrency, not a fixed static count.
+    'void_ptr_int_ptr':     128,
     # peak 2 static pointers (log + profiler block-begin) -> 16x -> 32
     'void_charptr':         32,
     # peak 2 static pointers (wheel softness + acceleration) -> 16x -> 32
@@ -177,7 +182,6 @@ CALLBACK_SLOTS = {
     'void_void':            1,  # HkTaskProfiler.TaskFinishedFunc
     'bool_ptr_ptr':         1,  # HkBreakOffPartsUtil.BreakPartsHandler
     'int_ptr_ptr_uint_ptr': 1,  # HkBreakOffPartsUtil.BreakLogicHandler
-    'void_ptr_int_ptr':     1,  # HkConstraint ConstraintReader (static method group)
 }
 
 
@@ -223,10 +227,15 @@ PHANTOM_SHAPE_CREATE_FUNCS = {
 #   * HkUniformGridShape_SetShapeRequestHandler.blockingCallback: RETAINED -- Havok
 #     calls it later for lazy voxel-batch loading (it is a shared static delegate,
 #     so it occupies just one deduplicated slot anyway).
-#   * HkConstraint_FindConnectedConstraints.reader: a shared static method group
-#     (ConstraintReader), so it already dedups to a single slot; nothing to release.
+#   * HkConstraint_FindConnectedConstraints.reader: ConstraintReader. The C# side
+#     marshals a fresh native thunk per world load (the method-group delegate is NOT
+#     a process-wide singleton), so without release the first load's thunk stays
+#     pinned live forever and the second load aborts the single-slot family. Havok
+#     invokes it only synchronously to fill the list and never retains it past the
+#     call (see HkConstraint.GetAttachedConstraints), so release it right after.
 SYNC_RELEASE_ARGS = {
     'HkShapeLoader_CleanupShapesBuffer': ['returnByteArray'],
+    'HkConstraint_FindConnectedConstraints': ['reader'],
 }
 
 EXPORT_ALIASES = {

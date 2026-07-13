@@ -22,21 +22,50 @@
 
 
 using void_ptr_int_ptr_sysv_t = void (*)(void* arg0, int32_t arg1, void* arg2);
+using void_ptr_int_ptr_ms_t = void (WINAPI *)(void* arg0, int32_t arg1, void* arg2);
 static std::mutex void_ptr_int_ptr_mutex;
 
-// Single-slot family: one target read lock-free by the thunk (acquire) and
-// published under the mutex (release). No collection -- just this pointer.
-static std::atomic_uintptr_t void_ptr_int_ptr_target = 0;
-static uint32_t void_ptr_int_ptr_refcount = 0;  // guarded by void_ptr_int_ptr_mutex
+// Per-slot target read lock-free by the thunks (acquire) and published by
+// bridge()/release() (release) under the mutex. Slot management (dedup +
+// allocation) is O(1): an index map for dedup and a free-list stack for
+// allocation, both touched only under the mutex, never by the thunks.
+static std::atomic_uintptr_t void_ptr_int_ptr_targets[128] = {};
+struct void_ptr_int_ptr_slot { uint32_t index; uint32_t refs; };
+static std::unordered_map<void *, void_ptr_int_ptr_slot> void_ptr_int_ptr_index;
+static std::vector<uint32_t> void_ptr_int_ptr_free_slots;
+static uint32_t void_ptr_int_ptr_high_water = 0;
 
+template <size_t Index>
 static void WINAPI void_ptr_int_ptr_thunk(void* arg0, int32_t arg1, void* arg2)
 {
-    auto fn = reinterpret_cast<void_ptr_int_ptr_sysv_t>(void_ptr_int_ptr_target.load(std::memory_order_acquire));
+    auto fn_bits = void_ptr_int_ptr_targets[Index].load(std::memory_order_acquire);
+    auto fn = reinterpret_cast<void_ptr_int_ptr_sysv_t>(fn_bits);
     if (!fn) {
         return;
     }
     fn(arg0, arg1, arg2);
 }
+
+// Thunk pointer table -- see emit_thunk_table() in the generator. This is the
+// power-of-two doubling-macro form of an explicit 128-entry initializer
+// list (&void_ptr_int_ptr_thunk<0> .. &void_ptr_int_ptr_thunk<127>), one instantiation per slot.
+#define HKTHUNK_1(n) &void_ptr_int_ptr_thunk<(n)>
+#define HKTHUNK_2(n) HKTHUNK_1(n), HKTHUNK_1((n) + 1)
+#define HKTHUNK_4(n) HKTHUNK_2(n), HKTHUNK_2((n) + 2)
+#define HKTHUNK_8(n) HKTHUNK_4(n), HKTHUNK_4((n) + 4)
+#define HKTHUNK_16(n) HKTHUNK_8(n), HKTHUNK_8((n) + 8)
+#define HKTHUNK_32(n) HKTHUNK_16(n), HKTHUNK_16((n) + 16)
+#define HKTHUNK_64(n) HKTHUNK_32(n), HKTHUNK_32((n) + 32)
+#define HKTHUNK_128(n) HKTHUNK_64(n), HKTHUNK_64((n) + 64)
+static void_ptr_int_ptr_ms_t void_ptr_int_ptr_thunks[128] = { HKTHUNK_128(0) };
+#undef HKTHUNK_1
+#undef HKTHUNK_2
+#undef HKTHUNK_4
+#undef HKTHUNK_8
+#undef HKTHUNK_16
+#undef HKTHUNK_32
+#undef HKTHUNK_64
+#undef HKTHUNK_128
 
 void *bridge_void_ptr_int_ptr(void *target_ptr)
 {
@@ -44,21 +73,30 @@ void *bridge_void_ptr_int_ptr(void *target_ptr)
         return nullptr;
     }
     std::lock_guard<std::mutex> lock(void_ptr_int_ptr_mutex);
-    auto current = void_ptr_int_ptr_target.load(std::memory_order_acquire);
-    if (current == 0) {
-        void_ptr_int_ptr_target.store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);
-        void_ptr_int_ptr_refcount = 1;
-    } else if (current == reinterpret_cast<uintptr_t>(target_ptr)) {
-        ++void_ptr_int_ptr_refcount;
+    auto existing = void_ptr_int_ptr_index.find(target_ptr);
+    if (existing != void_ptr_int_ptr_index.end()) {
+        ++existing->second.refs;
+        return reinterpret_cast<void *>(void_ptr_int_ptr_thunks[existing->second.index]);
+    }
+    uint32_t index;
+    if (!void_ptr_int_ptr_free_slots.empty()) {
+        index = void_ptr_int_ptr_free_slots.back();
+        void_ptr_int_ptr_free_slots.pop_back();
+    } else if (void_ptr_int_ptr_high_water < 128) {
+        index = void_ptr_int_ptr_high_water++;
     } else {
         fprintf(stderr,
-                "FATAL: Havok callback bridge single-slot family 'void_ptr_int_ptr' received a\n"
-                "  second distinct target while the first was still live. It was sized for one\n"
-                "  callback pointer; give it a multi-slot pool in CALLBACK_SLOTS in\n"
-                "  tools/generate_havok_wrapper.py, regenerate, and rebuild.\n");
+                "FATAL: Havok callback bridge pool exhausted for the 'void_ptr_int_ptr' signature family:\n"
+                "  All 128 bridge slots are in use. Every distinct live native callback of this\n"
+                "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
+                "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
+                "  Fix: raise this family in CALLBACK_SLOTS (currently 128) in tools/generate_havok_wrapper.py,\n"
+                "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\n");
         std::abort();
     }
-    return reinterpret_cast<void *>(&void_ptr_int_ptr_thunk);
+    void_ptr_int_ptr_targets[index].store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);
+    void_ptr_int_ptr_index.emplace(target_ptr, void_ptr_int_ptr_slot{index, 1});
+    return reinterpret_cast<void *>(void_ptr_int_ptr_thunks[index]);
 }
 
 void release_void_ptr_int_ptr(void *target_ptr)
@@ -67,10 +105,14 @@ void release_void_ptr_int_ptr(void *target_ptr)
         return;
     }
     std::lock_guard<std::mutex> lock(void_ptr_int_ptr_mutex);
-    if (void_ptr_int_ptr_target.load(std::memory_order_acquire) != reinterpret_cast<uintptr_t>(target_ptr)) {
+    auto it = void_ptr_int_ptr_index.find(target_ptr);
+    if (it == void_ptr_int_ptr_index.end()) {
         return;
     }
-    if (void_ptr_int_ptr_refcount > 0 && --void_ptr_int_ptr_refcount == 0) {
-        void_ptr_int_ptr_target.store(0, std::memory_order_release);
+    if (--it->second.refs == 0) {
+        uint32_t index = it->second.index;
+        void_ptr_int_ptr_targets[index].store(0, std::memory_order_release);
+        void_ptr_int_ptr_free_slots.push_back(index);
+        void_ptr_int_ptr_index.erase(it);
     }
 }

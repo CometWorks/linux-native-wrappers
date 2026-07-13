@@ -4013,6 +4013,7 @@ void HkConstraint_FindConnectedConstraints(void* rigidBody, void* reader, void* 
     LOG_CALL(HkConstraint_FindConnectedConstraints);
     REQUIRE_FUNCTION_POINTER(HkConstraint_FindConnectedConstraints)
     pHkConstraint_FindConnectedConstraints(rigidBody, bridge_void_ptr_int_ptr(reader), userData);
+    release_void_ptr_int_ptr(reader);
 }
 
 float HkConstraintData_GetMaximumLinearImpulse(void* instance) { EnsureThreadInfo();
