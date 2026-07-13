@@ -46,40 +46,22 @@ static float WINAPI float_ptr_thunk(void* arg0)
     return fn(arg0);
 }
 
-static float_ptr_ms_t float_ptr_thunks[32] = {
-    &float_ptr_thunk<0>,
-    &float_ptr_thunk<1>,
-    &float_ptr_thunk<2>,
-    &float_ptr_thunk<3>,
-    &float_ptr_thunk<4>,
-    &float_ptr_thunk<5>,
-    &float_ptr_thunk<6>,
-    &float_ptr_thunk<7>,
-    &float_ptr_thunk<8>,
-    &float_ptr_thunk<9>,
-    &float_ptr_thunk<10>,
-    &float_ptr_thunk<11>,
-    &float_ptr_thunk<12>,
-    &float_ptr_thunk<13>,
-    &float_ptr_thunk<14>,
-    &float_ptr_thunk<15>,
-    &float_ptr_thunk<16>,
-    &float_ptr_thunk<17>,
-    &float_ptr_thunk<18>,
-    &float_ptr_thunk<19>,
-    &float_ptr_thunk<20>,
-    &float_ptr_thunk<21>,
-    &float_ptr_thunk<22>,
-    &float_ptr_thunk<23>,
-    &float_ptr_thunk<24>,
-    &float_ptr_thunk<25>,
-    &float_ptr_thunk<26>,
-    &float_ptr_thunk<27>,
-    &float_ptr_thunk<28>,
-    &float_ptr_thunk<29>,
-    &float_ptr_thunk<30>,
-    &float_ptr_thunk<31>
-};
+// Thunk pointer table -- see emit_thunk_table() in the generator. This is the
+// power-of-two doubling-macro form of an explicit 32-entry initializer
+// list (&float_ptr_thunk<0> .. &float_ptr_thunk<31>), one instantiation per slot.
+#define HKTHUNK_1(n) &float_ptr_thunk<(n)>
+#define HKTHUNK_2(n) HKTHUNK_1(n), HKTHUNK_1((n) + 1)
+#define HKTHUNK_4(n) HKTHUNK_2(n), HKTHUNK_2((n) + 2)
+#define HKTHUNK_8(n) HKTHUNK_4(n), HKTHUNK_4((n) + 4)
+#define HKTHUNK_16(n) HKTHUNK_8(n), HKTHUNK_8((n) + 8)
+#define HKTHUNK_32(n) HKTHUNK_16(n), HKTHUNK_16((n) + 16)
+static float_ptr_ms_t float_ptr_thunks[32] = { HKTHUNK_32(0) };
+#undef HKTHUNK_1
+#undef HKTHUNK_2
+#undef HKTHUNK_4
+#undef HKTHUNK_8
+#undef HKTHUNK_16
+#undef HKTHUNK_32
 
 void *bridge_float_ptr(void *target_ptr)
 {

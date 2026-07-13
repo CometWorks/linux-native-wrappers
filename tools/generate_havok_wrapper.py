@@ -596,6 +596,63 @@ def emit_bridge_single(name: str, ret: str, params: str, args: str):
     return lines
 
 
+def emit_thunk_table(name: str, ms_type: str, slots: int):
+    # The thunk table is conceptually one distinct template instantiation per
+    # slot:
+    #
+    #     static <ms_type> <name>_thunks[slots] = {
+    #         &<name>_thunk<0>, &<name>_thunk<1>, ... , &<name>_thunk<slots-1>,
+    #     };
+    #
+    # Emitted flat that is `slots` initializer lines -- 32768 for the big
+    # void_ptr_ptr family -- which dominates the file. Instead we build the exact
+    # same array with a ladder of doubling macros, so the table costs
+    # O(log2(slots)) source lines (one macro per power of two) at the price of
+    # macro nesting. HKTHUNK_1(n) is a single &<name>_thunk<n>; each
+    # HKTHUNK_2N(n) expands to two HKTHUNK_N blocks -- the lower half at offset n,
+    # the upper half at n+N -- so a single HKTHUNK_<pow>(offset) fans out to a
+    # whole power-of-two run of consecutive indices. A count that is not a power
+    # of two is assembled from its binary decomposition (e.g. 96 -> HKTHUNK_64(0),
+    # HKTHUNK_32(64)). The macros are #undef'd right after the table so they do
+    # not leak.
+    top = 1
+    while top * 2 <= slots:
+        top *= 2
+
+    lines = [
+        '// Thunk pointer table -- see emit_thunk_table() in the generator. This is the',
+        f'// power-of-two doubling-macro form of an explicit {slots}-entry initializer',
+        f'// list (&{name}_thunk<0> .. &{name}_thunk<{slots - 1}>), one instantiation per slot.',
+        f'#define HKTHUNK_1(n) &{name}_thunk<(n)>',
+    ]
+    power = 1
+    while power < top:
+        lines.append(
+            f'#define HKTHUNK_{power * 2}(n) HKTHUNK_{power}(n), HKTHUNK_{power}((n) + {power})'
+        )
+        power *= 2
+
+    blocks = []
+    offset = 0
+    power = top
+    remaining = slots
+    while power >= 1:
+        if remaining >= power:
+            blocks.append(f'HKTHUNK_{power}({offset})')
+            offset += power
+            remaining -= power
+        power //= 2
+
+    lines.append(f'static {ms_type} {name}_thunks[{slots}] = {{ {", ".join(blocks)} }};')
+
+    power = 1
+    lines.append('#undef HKTHUNK_1')
+    while power < top:
+        lines.append(f'#undef HKTHUNK_{power * 2}')
+        power *= 2
+    return lines
+
+
 def emit_bridge_family(name: str, ret: str, params: str, args: str):
     slots = slots_for(name)
     if slots == 1:
@@ -643,13 +700,9 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
     lines.extend([
         '}',
         '',
-        f'static {ms_type} {name}_thunks[{slots}] = {{',
     ])
-    for index in range(slots):
-        suffix = ',' if index + 1 < slots else ''
-        lines.append(f'    &{name}_thunk<{index}>{suffix}')
+    lines.extend(emit_thunk_table(name, ms_type, slots))
     lines.extend([
-        '};',
         '',
         f'void *bridge_{name}(void *target_ptr)',
         '{',

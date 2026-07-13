@@ -46,40 +46,22 @@ static void WINAPI void_charptr_thunk(char* arg0)
     fn(arg0);
 }
 
-static void_charptr_ms_t void_charptr_thunks[32] = {
-    &void_charptr_thunk<0>,
-    &void_charptr_thunk<1>,
-    &void_charptr_thunk<2>,
-    &void_charptr_thunk<3>,
-    &void_charptr_thunk<4>,
-    &void_charptr_thunk<5>,
-    &void_charptr_thunk<6>,
-    &void_charptr_thunk<7>,
-    &void_charptr_thunk<8>,
-    &void_charptr_thunk<9>,
-    &void_charptr_thunk<10>,
-    &void_charptr_thunk<11>,
-    &void_charptr_thunk<12>,
-    &void_charptr_thunk<13>,
-    &void_charptr_thunk<14>,
-    &void_charptr_thunk<15>,
-    &void_charptr_thunk<16>,
-    &void_charptr_thunk<17>,
-    &void_charptr_thunk<18>,
-    &void_charptr_thunk<19>,
-    &void_charptr_thunk<20>,
-    &void_charptr_thunk<21>,
-    &void_charptr_thunk<22>,
-    &void_charptr_thunk<23>,
-    &void_charptr_thunk<24>,
-    &void_charptr_thunk<25>,
-    &void_charptr_thunk<26>,
-    &void_charptr_thunk<27>,
-    &void_charptr_thunk<28>,
-    &void_charptr_thunk<29>,
-    &void_charptr_thunk<30>,
-    &void_charptr_thunk<31>
-};
+// Thunk pointer table -- see emit_thunk_table() in the generator. This is the
+// power-of-two doubling-macro form of an explicit 32-entry initializer
+// list (&void_charptr_thunk<0> .. &void_charptr_thunk<31>), one instantiation per slot.
+#define HKTHUNK_1(n) &void_charptr_thunk<(n)>
+#define HKTHUNK_2(n) HKTHUNK_1(n), HKTHUNK_1((n) + 1)
+#define HKTHUNK_4(n) HKTHUNK_2(n), HKTHUNK_2((n) + 2)
+#define HKTHUNK_8(n) HKTHUNK_4(n), HKTHUNK_4((n) + 4)
+#define HKTHUNK_16(n) HKTHUNK_8(n), HKTHUNK_8((n) + 8)
+#define HKTHUNK_32(n) HKTHUNK_16(n), HKTHUNK_16((n) + 16)
+static void_charptr_ms_t void_charptr_thunks[32] = { HKTHUNK_32(0) };
+#undef HKTHUNK_1
+#undef HKTHUNK_2
+#undef HKTHUNK_4
+#undef HKTHUNK_8
+#undef HKTHUNK_16
+#undef HKTHUNK_32
 
 void *bridge_void_charptr(void *target_ptr)
 {
