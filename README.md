@@ -69,17 +69,17 @@ depends entirely on how the game's Havok wrapper marshals that callback:
   2 `void_ptr_ptr` slots (enter/leave). The game creates one phantom shape per
   trigger/detector volume — ship connectors and ejectors, collectors, gravity
   generators, merge blocks, safe zones, and opt-in detector entities — so
-  **`void_ptr_ptr` scales with block count** and gets **16384** slots. Loading
+  **`void_ptr_ptr` scales with block count** and gets **32768** slots. Loading
   *"Many Lifters Slowness"* (699 grids) exhausted the previous flat limit of 4096
   and aborted. These slots are **reclaimed when the shape is destroyed** (see
-  below), so 16384 bounds the *concurrent* number of live phantoms, not the
+  below), so 32768 bounds the *concurrent* number of live phantoms, not the
   cumulative total ever created.
 - **Fresh-per-call delegates** — `HkShapeLoader` buffer cleanup and
   `HkConstraint.FindConnectedConstraints` marshal a new, never-released callback
   on each call, so `void_ptr_int` and `void_ptr_int_ptr` get a **4096** safety
   margin above the default.
 
-This keeps `libHavok.so` at ~14 MB (versus ~87 MB if every family used 16384).
+This keeps `libHavok.so` at ~22 MB (versus ~180 MB if every family used 32768).
 If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
 offending family and pointing back at the generator, then aborts; raise that
 family's entry in `CALLBACK_SLOTS`, regenerate, and rebuild. Run-time growth is

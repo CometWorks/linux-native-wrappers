@@ -149,8 +149,8 @@ FAMILY_SIGNATURES = {
 #     native delegates: each live phantom shape uses 2 void_ptr_ptr slots
 #     (enter/leave). The game makes one per trigger/detector volume (ship
 #     connectors + ejectors, collectors, gravity generators, merge blocks, safe
-#     zones), so void_ptr_ptr scales with block count -> 16384. The phantom-slot
-#     reclaim (see OWNER_HELPERS) frees these when a shape is destroyed, so 16384
+#     zones), so void_ptr_ptr scales with block count -> 32768. The phantom-slot
+#     reclaim (see OWNER_HELPERS) frees these when a shape is destroyed, so 32768
 #     bounds *concurrent* live phantoms, not the cumulative total ever created.
 #     The phantom delete callback is NOT bridged (Havok is given one shared
 #     dispatcher), so void_ptr has no per-instance producer and stays at default.
@@ -159,7 +159,7 @@ FAMILY_SIGNATURES = {
 DEFAULT_CALLBACK_SLOTS = 256
 
 CALLBACK_SLOTS = {
-    'void_ptr_ptr':      16384,  # 2 per live HkPhantomCallbackShape (enter/leave), reclaimed on destroy
+    'void_ptr_ptr':      32768,  # 2 per live HkPhantomCallbackShape (enter/leave), reclaimed on destroy
     'void_ptr_int':       4096,  # HkShapeLoader cleanup marshals a fresh callback per call
     'void_ptr_int_ptr':   4096,  # HkConstraint.FindConnectedConstraints reader, per call
 }
