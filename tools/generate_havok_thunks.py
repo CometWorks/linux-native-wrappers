@@ -25,19 +25,48 @@ THUNK_HEADER = THUNK_DIR / 'HavokThunkRegistry.h'
 
 # Number of bridge slots reserved per callback signature family.
 #
-# Each slot is one compile-time-instantiated thunk, so this is baked into every
-# generated source and fixed for the lifetime of the build. Raising it grows the
-# binary and the compile time roughly linearly (there is one templated function
-# per slot per family), so keep it as small as the worst-case world requires.
+# Each slot is one compile-time-instantiated thunk, so the count is baked into
+# every generated source and fixed for the lifetime of the build. Raising it
+# grows the binary and the compile time roughly linearly (there is one templated
+# function per slot per family), so each family is sized to its worst case rather
+# than all sharing one large pool. Dynamic (run-time) extension is not practical
+# for this design -- see the module docstring.
 #
-# 16384 was chosen because dynamic (run-time) extension of the pool is not
-# practical for this design -- see the module docstring. Worlds with very many
-# grids/blocks register a large number of simultaneous callbacks: e.g. loading
-# "Many Lifters Slowness" (699 grids, ~13k thrusters) exhausted the previous
-# limit of 4096 for the `void_ptr_ptr` family and aborted the process. If this
-# limit is ever hit again the generated bridge prints a diagnostic naming the
-# family and pointing back here; raise the value, regenerate, and rebuild.
-CALLBACK_SLOTS = 16384
+# Sizing is driven by how many *distinct* native callback pointers a family can
+# have live at once, which depends on how the game's Havok wrapper marshals them:
+#
+#   * Delegates held in `static readonly` fields marshal to ONE shared pointer no
+#     matter how many listener/constraint/wheel instances exist (dispatch happens
+#     via the listener handle passed as arg0). These families need only a handful
+#     of slots -> DEFAULT_CALLBACK_SLOTS.
+#
+#   * `HkPhantomCallbackShape` is the ONLY producer that marshals PER-INSTANCE
+#     native delegates: each live phantom shape consumes 2 `void_ptr_ptr` slots
+#     (enter/leave) + 1 `void_ptr` slot (delete). The game creates one phantom
+#     shape per trigger/detector volume (ship connectors + ejectors, collectors,
+#     gravity generators, merge blocks, safe zones, opt-in detector entities), so
+#     these two families scale with block count and need a large pool. Loading
+#     "Many Lifters Slowness" (699 grids) exhausted the previous flat limit of
+#     4096 for `void_ptr_ptr` and aborted the process.
+#
+#   * A couple of families pass a fresh, never-released callback per call
+#     (HkShapeLoader buffer cleanup, HkConstraint.FindConnectedConstraints), so
+#     they get a safety margin above the tiny default.
+#
+# If a family is ever exhausted anyway the generated bridge prints a diagnostic
+# naming it and pointing back here; raise its entry below, regenerate, rebuild.
+DEFAULT_CALLBACK_SLOTS = 256
+
+CALLBACK_SLOTS = {
+    'void_ptr':          16384,  # + 1 per live HkPhantomCallbackShape (delete handler)
+    'void_ptr_ptr':      16384,  # + 2 per live HkPhantomCallbackShape (enter/leave)
+    'void_ptr_int':       4096,  # HkShapeLoader cleanup marshals a fresh callback per call
+    'void_ptr_int_ptr':   4096,  # HkConstraint.FindConnectedConstraints reader, per call
+}
+
+
+def slots_for(family_name):
+    return CALLBACK_SLOTS.get(family_name, DEFAULT_CALLBACK_SLOTS)
 
 # ret, params, args for each callback signature family.
 FAMILY_SIGNATURES = {
@@ -59,10 +88,10 @@ GENERATED_BANNER = '''// =======================================================
 // Regenerate with: python3 tools/generate_havok_thunks.py
 //
 // Havok callback bridge pool. Each slot is a distinct compile-time thunk address
-// handed to Havok as a C callback; the pool size (CALLBACK_SLOTS) is fixed per
-// build and cannot be grown at run time. If the pool is exhausted the bridge
-// prints a diagnostic and aborts -- raise CALLBACK_SLOTS in the generator,
-// regenerate, and rebuild.
+// handed to Havok as a C callback; the per-family pool size is fixed per build
+// and cannot be grown at run time. If the pool is exhausted the bridge prints a
+// diagnostic and aborts -- raise this family's entry in CALLBACK_SLOTS in the
+// generator, regenerate, and rebuild.
 // ============================================================================
 '''
 
@@ -106,6 +135,7 @@ def emit_thunk_header(families):
 
 
 def emit_bridge_family(name: str, ret: str, params: str, args: str):
+    slots = slots_for(name)
     sysv_type = f'{name}_sysv_t'
     ms_type = f'{name}_ms_t'
     thunk_params = params
@@ -115,8 +145,8 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
         f'using {sysv_type} = {ret} (*)({params});',
         f'using {ms_type} = {ret} (WINAPI *)({params});',
         f'static std::mutex {name}_mutex;',
-        f'static std::atomic_uintptr_t {name}_targets[{CALLBACK_SLOTS}] = {{}};',
-        f'static std::atomic_uint32_t {name}_refcounts[{CALLBACK_SLOTS}] = {{}};',
+        f'static std::atomic_uintptr_t {name}_targets[{slots}] = {{}};',
+        f'static std::atomic_uint32_t {name}_refcounts[{slots}] = {{}};',
         '',
         'template <size_t Index>',
         f'static {ret} WINAPI {name}_thunk({thunk_params})',
@@ -141,10 +171,10 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
     lines.extend([
         '}',
         '',
-        f'static {ms_type} {name}_thunks[{CALLBACK_SLOTS}] = {{',
+        f'static {ms_type} {name}_thunks[{slots}] = {{',
     ])
-    for index in range(CALLBACK_SLOTS):
-        suffix = ',' if index + 1 < CALLBACK_SLOTS else ''
+    for index in range(slots):
+        suffix = ',' if index + 1 < slots else ''
         lines.append(f'    &{name}_thunk<{index}>{suffix}')
     lines.extend([
         '};',
@@ -156,13 +186,13 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
         '    }',
         f'    auto target = reinterpret_cast<{sysv_type}>(target_ptr);',
         f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    for (size_t i = 0; i < {CALLBACK_SLOTS}; ++i) {{',
+        f'    for (size_t i = 0; i < {slots}; ++i) {{',
         f'        if (reinterpret_cast<{sysv_type}>({name}_targets[i].load(std::memory_order_acquire)) == target) {{',
         f'            {name}_refcounts[i].fetch_add(1, std::memory_order_relaxed);',
         f'            return reinterpret_cast<void *>({name}_thunks[i]);',
         '        }',
         '    }',
-        f'    for (size_t i = 0; i < {CALLBACK_SLOTS}; ++i) {{',
+        f'    for (size_t i = 0; i < {slots}; ++i) {{',
         f'        if ({name}_targets[i].load(std::memory_order_acquire) == 0) {{',
         f'            {name}_targets[i].store(reinterpret_cast<uintptr_t>(target), std::memory_order_release);',
         f'            {name}_refcounts[i].store(1, std::memory_order_relaxed);',
@@ -171,10 +201,10 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
         '    }',
         '    fprintf(stderr,',
         f'            "FATAL: Havok callback bridge pool exhausted for the \'{name}\' signature family:\\n"',
-        f'            "  All {CALLBACK_SLOTS} bridge slots are in use. Every live Havok callback with this\\n"',
-        '            "  signature consumes one slot, so worlds with very many grids/blocks (e.g. thousands\\n"',
-        '            "  of thrusters or listeners) can register more callbacks than the pool can hold.\\n"',
-        f'            "  Fix: raise CALLBACK_SLOTS (currently {CALLBACK_SLOTS}) in tools/generate_havok_thunks.py,\\n"',
+        f'            "  All {slots} bridge slots are in use. Every distinct live native callback of this\\n"',
+        '            "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\\n"',
+        '            "  in worlds with very many grids/blocks can register more than the pool can hold.\\n"',
+        f'            "  Fix: raise this family in CALLBACK_SLOTS (currently {slots}) in tools/generate_havok_thunks.py,\\n"',
         '            "  regenerate the thunks (python3 tools/generate_havok_thunks.py), and rebuild.\\n");',
         '    std::abort();',
         '}',
@@ -186,7 +216,7 @@ def emit_bridge_family(name: str, ret: str, params: str, args: str):
         '    }',
         f'    auto target = reinterpret_cast<{sysv_type}>(target_ptr);',
         f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    for (size_t i = 0; i < {CALLBACK_SLOTS}; ++i) {{',
+        f'    for (size_t i = 0; i < {slots}; ++i) {{',
         f'        if (reinterpret_cast<{sysv_type}>({name}_targets[i].load(std::memory_order_acquire)) == target) {{',
         f'            auto refs = {name}_refcounts[i].load(std::memory_order_relaxed);',
         f'            if (refs > 0) {{',
@@ -212,7 +242,10 @@ def main():
     for family_name in family_names:
         ret, params, args = FAMILY_SIGNATURES[family_name]
         (THUNK_DIR / thunk_file_name(family_name)).write_text('\n'.join(emit_bridge_family(family_name, ret, params, args)))
-    print(f'Generated {len(family_names)} thunk families with CALLBACK_SLOTS={CALLBACK_SLOTS}')
+    total = sum(slots_for(f) for f in family_names)
+    print(f'Generated {len(family_names)} thunk families ({total} slots total):')
+    for f in family_names:
+        print(f'  {f}: {slots_for(f)}')
 
 
 if __name__ == '__main__':

@@ -3,10 +3,10 @@
 // Regenerate with: python3 tools/generate_havok_thunks.py
 //
 // Havok callback bridge pool. Each slot is a distinct compile-time thunk address
-// handed to Havok as a C callback; the pool size (CALLBACK_SLOTS) is fixed per
-// build and cannot be grown at run time. If the pool is exhausted the bridge
-// prints a diagnostic and aborts -- raise CALLBACK_SLOTS in the generator,
-// regenerate, and rebuild.
+// handed to Havok as a C callback; the per-family pool size is fixed per build
+// and cannot be grown at run time. If the pool is exhausted the bridge prints a
+// diagnostic and aborts -- raise this family's entry in CALLBACK_SLOTS in the
+// generator, regenerate, and rebuild.
 // ============================================================================
 #include <cstdint>
 #include <cstddef>
@@ -16445,10 +16445,10 @@ void *bridge_void_ptr_ptr(void *target_ptr)
     }
     fprintf(stderr,
             "FATAL: Havok callback bridge pool exhausted for the 'void_ptr_ptr' signature family:\n"
-            "  All 16384 bridge slots are in use. Every live Havok callback with this\n"
-            "  signature consumes one slot, so worlds with very many grids/blocks (e.g. thousands\n"
-            "  of thrusters or listeners) can register more callbacks than the pool can hold.\n"
-            "  Fix: raise CALLBACK_SLOTS (currently 16384) in tools/generate_havok_thunks.py,\n"
+            "  All 16384 bridge slots are in use. Every distinct live native callback of this\n"
+            "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
+            "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
+            "  Fix: raise this family in CALLBACK_SLOTS (currently 16384) in tools/generate_havok_thunks.py,\n"
             "  regenerate the thunks (python3 tools/generate_havok_thunks.py), and rebuild.\n");
     std::abort();
 }
