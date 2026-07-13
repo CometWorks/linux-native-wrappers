@@ -29,6 +29,8 @@ correct managed target we therefore need a *distinct code address per live
 callback*. `src/HavokThunk_*.cpp` provide these: for every callback signature
 family there is a pool of `CALLBACK_SLOTS` template-instantiated thunks
 (`<family>_thunk<Index>`), each of which reads its target from a per-slot table.
+Invoking a callback is a single lock-free atomic load; registering and releasing
+one (`bridge_*` / `release_*`) is O(1) via an index map plus a free-list of slots.
 
 Those thunk addresses are baked into the binary at compile time, so **the pool
 size is fixed per build and cannot be grown at run time** (doing so would require

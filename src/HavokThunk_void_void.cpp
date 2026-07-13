@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <unordered_map>
+#include <vector>
 
 #include "win_types.h"
 #include "HavokThunkRegistry.h"
@@ -22,8 +24,16 @@
 using void_void_sysv_t = void (*)(void);
 using void_void_ms_t = void (WINAPI *)(void);
 static std::mutex void_void_mutex;
+
+// Per-slot target read lock-free by the thunks (acquire) and published by
+// bridge()/release() (release) under the mutex. Slot management (dedup +
+// allocation) is O(1): an index map for dedup and a free-list stack for
+// allocation, both touched only under the mutex, never by the thunks.
 static std::atomic_uintptr_t void_void_targets[256] = {};
-static std::atomic_uint32_t void_void_refcounts[256] = {};
+struct void_void_slot { uint32_t index; uint32_t refs; };
+static std::unordered_map<void *, void_void_slot> void_void_index;
+static std::vector<uint32_t> void_void_free_slots;
+static uint32_t void_void_high_water = 0;
 
 template <size_t Index>
 static void WINAPI void_void_thunk(void)
@@ -300,29 +310,31 @@ void *bridge_void_void(void *target_ptr)
     if (!target_ptr) {
         return nullptr;
     }
-    auto target = reinterpret_cast<void_void_sysv_t>(target_ptr);
     std::lock_guard<std::mutex> lock(void_void_mutex);
-    for (size_t i = 0; i < 256; ++i) {
-        if (reinterpret_cast<void_void_sysv_t>(void_void_targets[i].load(std::memory_order_acquire)) == target) {
-            void_void_refcounts[i].fetch_add(1, std::memory_order_relaxed);
-            return reinterpret_cast<void *>(void_void_thunks[i]);
-        }
+    auto existing = void_void_index.find(target_ptr);
+    if (existing != void_void_index.end()) {
+        ++existing->second.refs;
+        return reinterpret_cast<void *>(void_void_thunks[existing->second.index]);
     }
-    for (size_t i = 0; i < 256; ++i) {
-        if (void_void_targets[i].load(std::memory_order_acquire) == 0) {
-            void_void_targets[i].store(reinterpret_cast<uintptr_t>(target), std::memory_order_release);
-            void_void_refcounts[i].store(1, std::memory_order_relaxed);
-            return reinterpret_cast<void *>(void_void_thunks[i]);
-        }
+    uint32_t index;
+    if (!void_void_free_slots.empty()) {
+        index = void_void_free_slots.back();
+        void_void_free_slots.pop_back();
+    } else if (void_void_high_water < 256) {
+        index = void_void_high_water++;
+    } else {
+        fprintf(stderr,
+                "FATAL: Havok callback bridge pool exhausted for the 'void_void' signature family:\n"
+                "  All 256 bridge slots are in use. Every distinct live native callback of this\n"
+                "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
+                "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
+                "  Fix: raise this family in CALLBACK_SLOTS (currently 256) in tools/generate_havok_wrapper.py,\n"
+                "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\n");
+        std::abort();
     }
-    fprintf(stderr,
-            "FATAL: Havok callback bridge pool exhausted for the 'void_void' signature family:\n"
-            "  All 256 bridge slots are in use. Every distinct live native callback of this\n"
-            "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
-            "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
-            "  Fix: raise this family in CALLBACK_SLOTS (currently 256) in tools/generate_havok_wrapper.py,\n"
-            "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\n");
-    std::abort();
+    void_void_targets[index].store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);
+    void_void_index.emplace(target_ptr, void_void_slot{index, 1});
+    return reinterpret_cast<void *>(void_void_thunks[index]);
 }
 
 void release_void_void(void *target_ptr)
@@ -330,18 +342,15 @@ void release_void_void(void *target_ptr)
     if (!target_ptr) {
         return;
     }
-    auto target = reinterpret_cast<void_void_sysv_t>(target_ptr);
     std::lock_guard<std::mutex> lock(void_void_mutex);
-    for (size_t i = 0; i < 256; ++i) {
-        if (reinterpret_cast<void_void_sysv_t>(void_void_targets[i].load(std::memory_order_acquire)) == target) {
-            auto refs = void_void_refcounts[i].load(std::memory_order_relaxed);
-            if (refs > 0) {
-                refs = void_void_refcounts[i].fetch_sub(1, std::memory_order_acq_rel) - 1;
-            }
-            if (refs == 0) {
-                void_void_targets[i].store(0, std::memory_order_release);
-            }
-            return;
-        }
+    auto it = void_void_index.find(target_ptr);
+    if (it == void_void_index.end()) {
+        return;
+    }
+    if (--it->second.refs == 0) {
+        uint32_t index = it->second.index;
+        void_void_targets[index].store(0, std::memory_order_release);
+        void_void_free_slots.push_back(index);
+        void_void_index.erase(it);
     }
 }
