@@ -73,6 +73,58 @@ void release_callback_owner(void *owner)
     g_callback_owner_bindings.erase(it);
 }
 
+// HkPhantomCallbackShape is the only Havok wrapper that hands Havok a *distinct*
+// native delegate per instance (enter/leave/delete), so each live phantom shape
+// permanently consumes callback-bridge slots. Havok only signals that a shape is
+// gone by invoking its delete callback, so every phantom is handed the single
+// shared delete dispatcher below instead of a per-instance bridged delete. When
+// Havok calls it (with the shape handle) we forward to the managed delete handler
+// and then reclaim the enter/leave bridge slots so later phantoms can reuse them.
+struct phantom_callback_shape_binding {
+    void *enter;  // managed (SysV) enter callback target
+    void *leave;  // managed (SysV) leave callback target
+    void *del;    // managed (SysV) delete callback target
+};
+
+static std::mutex g_phantom_shape_mutex;
+static std::unordered_map<void *, phantom_callback_shape_binding> g_phantom_shape_bindings;
+
+using phantom_delete_sysv_t = void (*)(void *shape);
+
+// One shared MS-ABI callback handed to Havok as the delete handler for EVERY
+// phantom callback shape; Havok invokes it with the shape handle when the shape
+// is destroyed.
+static void WINAPI phantom_delete_dispatch(void *shape)
+{
+    phantom_callback_shape_binding binding{};
+    {
+        std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
+        auto it = g_phantom_shape_bindings.find(shape);
+        if (it == g_phantom_shape_bindings.end()) {
+            return;
+        }
+        binding = it->second;
+        g_phantom_shape_bindings.erase(it);
+    }
+    // Forward to the managed delete handler (HkDeleteHandler: Instances.Remove).
+    if (binding.del) {
+        reinterpret_cast<phantom_delete_sysv_t>(binding.del)(shape);
+    }
+    // Reclaim the per-instance enter/leave bridge slots. The delete callback is
+    // never bridged (Havok holds this shared dispatcher), so it needs no release.
+    release_void_ptr_ptr(binding.enter);
+    release_void_ptr_ptr(binding.leave);
+}
+
+static void register_phantom_callback_shape(void *shape, void *enter, void *leave, void *del)
+{
+    if (!shape) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
+    g_phantom_shape_bindings[shape] = phantom_callback_shape_binding{enter, leave, del};
+}
+
 
 
 struct Vector3 {
@@ -5636,7 +5688,11 @@ void HkMotion_SetDeactivationClass(void* instance, int32_t value) { EnsureThread
 void* HkPhantomCallbackShape_Create(void* enterCallback, void* leaveCallback, void* deleteCallback) { EnsureThreadInfo();
     LOG_CALL(HkPhantomCallbackShape_Create);
     REQUIRE_FUNCTION_POINTER(HkPhantomCallbackShape_Create)
-    return pHkPhantomCallbackShape_Create(bridge_void_ptr_ptr(enterCallback), bridge_void_ptr_ptr(leaveCallback), bridge_void_ptr(deleteCallback));
+    void *enterThunk = bridge_void_ptr_ptr(enterCallback);
+    void *leaveThunk = bridge_void_ptr_ptr(leaveCallback);
+    auto result = pHkPhantomCallbackShape_Create(enterThunk, leaveThunk, reinterpret_cast<void *>(&phantom_delete_dispatch));
+    register_phantom_callback_shape(result, enterCallback, leaveCallback, deleteCallback);
+    return result;
 }
 
 void* HkPrismaticConstraintData_Create(void) { EnsureThreadInfo();

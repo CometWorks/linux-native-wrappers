@@ -1,6 +1,6 @@
 // ============================================================================
 // GENERATED FILE -- do not edit by hand.
-// Regenerate with: python3 tools/generate_havok_thunks.py
+// Regenerate with: python3 tools/generate_havok_wrapper.py
 //
 // Havok callback bridge pool. Each slot is a distinct compile-time thunk address
 // handed to Havok as a C callback; the per-family pool size is fixed per build
@@ -320,8 +320,8 @@ void *bridge_float_ptr(void *target_ptr)
             "  All 256 bridge slots are in use. Every distinct live native callback of this\n"
             "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\n"
             "  in worlds with very many grids/blocks can register more than the pool can hold.\n"
-            "  Fix: raise this family in CALLBACK_SLOTS (currently 256) in tools/generate_havok_thunks.py,\n"
-            "  regenerate the thunks (python3 tools/generate_havok_thunks.py), and rebuild.\n");
+            "  Fix: raise this family in CALLBACK_SLOTS (currently 256) in tools/generate_havok_wrapper.py,\n"
+            "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\n");
     std::abort();
 }
 
