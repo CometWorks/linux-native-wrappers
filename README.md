@@ -20,6 +20,99 @@ are provided based on Linux primitives, including optional ntsync support.
 | `libVRageNative.so`  | `VRage.Native.dll` (voxels) |
 | `libD3DCompiler.so`  | `d3dcompiler_47.dll` (shader compiler) |
 
+## Havok callback bridge thunks
+
+`Havok.dll` hands the engine raw C function pointers for its callbacks (contact
+listeners, entity listeners, phantom handlers, …) and passes **no user-data /
+context pointer** when it later invokes them. To route each callback back to the
+correct managed target we therefore need a *distinct code address per live
+callback*. `src/HavokThunk_*.cpp` provide these: for every callback signature
+family there is a pool of `CALLBACK_SLOTS` template-instantiated thunks
+(`<family>_thunk<Index>`), each of which reads its target from a per-slot table.
+Invoking a callback is a single lock-free atomic load; registering and releasing
+one (`bridge_*` / `release_*`) is O(1) via an index map plus a free-list of slots.
+
+The full per-family mapping, sizing rationale, limits and margins are documented in
+[`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
+
+Those thunk addresses are baked into the binary at compile time, so **the pool
+size is fixed per build and cannot be grown at run time** (doing so would require
+emitting machine code / JIT trampolines, which is architecture-specific and out
+of scope for a generated wrapper).
+
+`src/Havok.cpp` (one `extern "C"` shim per Havok.dll export) and the thunk sources
+are regenerated together by
+[`tools/generate_havok_wrapper.py`](tools/generate_havok_wrapper.py):
+
+```bash
+python3 tools/generate_havok_wrapper.py   # rewrites src/Havok.cpp, src/HavokThunk_*.cpp, HavokThunkRegistry.h
+```
+
+Generating `Havok.cpp` parses the game's decompiled `[DllImport]` declarations from
+`../dotnet-game-local/HavokWrapper/Havok`; that dependency is only needed to
+*regenerate*, not to build, since the generated sources are committed.
+
+### `CALLBACK_SLOTS` limitation and per-family sizing
+
+Each pool holds a fixed number of slots (one templated thunk each), baked in at
+compile time, so binary size and compile time grow roughly linearly with the
+total slot count. Rather than one flat limit for every family, `CALLBACK_SLOTS`
+in the generator sizes each family to its worst case. The size a family needs
+depends entirely on how the game's Havok wrapper marshals that callback:
+
+- **Shared `static` delegates** — entity/contact/sound listeners, constraint and
+  activation listeners, wheel modifiers, break-off handlers and the log sink all
+  hold their native delegate in a `static readonly` field and dispatch per-instance
+  via the listener handle passed as the first argument. These marshal to a *single*
+  pointer no matter how many grids, blocks or constraints exist, so each is sized to
+  its tiny fixed peak: a family with exactly one such pointer collapses to a
+  **single-slot** bridge (no map/free-list), and a family with a few gets the
+  smallest power of two ≥ 16× that peak. (Note: a `static` *method* passed as a bare
+  method-group argument is **not** in this class — the game does not cache that
+  conversion, so it marshals a fresh pointer each time; see the doc.)
+- **Per-instance delegates** — `HkPhantomCallbackShape` is the only wrapper that
+  marshals a *fresh* native delegate per instance: every live phantom shape burns
+  2 `void_ptr_ptr` slots (enter/leave). The game creates one phantom shape per
+  trigger/detector volume — ship connectors and ejectors, collectors, gravity
+  generators, merge blocks, safe zones, and opt-in detector entities — so
+  **`void_ptr_ptr` scales with block count** and gets **32768** slots. Loading
+  *"Many Lifters Slowness"* (699 grids) exhausted the previous flat limit of 4096
+  and aborted. These slots are **reclaimed when the shape is destroyed** (see
+  below), so 32768 bounds the *concurrent* number of live phantoms, not the
+  cumulative total ever created.
+- **Per-call synchronous delegates** — `HkShapeLoader` buffer cleanup marshals a
+  fresh callback per call that Havok invokes only during the call, so the wrapper
+  releases its slot right after (no leak), sizing it for loader concurrency (128).
+  `HkConstraint.FindConnectedConstraints` is the same: its `reader` is a bare
+  method-group (`ConstraintReader`) that marshals a **fresh** pointer per world load,
+  so bridging it without release pinned the first load's thunk and aborted on the
+  second world load. It is now released after each (synchronous) call and given a
+  128-slot pool. The dormant `HkTaskProfiler` callbacks are a latent copy of the same
+  pattern. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
+
+This keeps `libHavok.so` at ~17 MB (versus ~180 MB if every family used 32768).
+If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
+offending family and pointing back at the generator, then aborts; raise that
+family's entry in `CALLBACK_SLOTS`, regenerate, and rebuild. Run-time growth is
+not possible — the thunk addresses are compile-time template instantiations.
+
+### Phantom-shape slot reclaim
+
+Havok's callback bridge frees a slot only when its owner tells it to. For the
+`static`-delegate listeners that happens through the owner-release path
+(`register_callback_owner` / `release_callback_owner`), but those pointers are
+shared and pinned for the process lifetime anyway. The pointers that actually
+accumulate are `HkPhantomCallbackShape`'s per-instance enter/leave delegates —
+and Havok only signals that a shape is gone by invoking its **delete callback**.
+
+So instead of bridging a per-instance delete callback, every phantom shape is
+handed one shared native dispatcher (`phantom_delete_dispatch`). When Havok
+destroys a shape it calls that dispatcher with the shape handle, which forwards to
+the managed delete handler and then releases the shape's enter/leave bridge slots
+for reuse. Without this, a long session that repeatedly builds and destroys
+phantom blocks (or streams grids in and out) would leak `void_ptr_ptr` slots and
+eventually exhaust the pool even with few phantoms alive at once.
+
 ## Building locally
 
 Requirements: `cmake` (>= 3.10), `make`, `g++` (C++17).
@@ -33,17 +126,23 @@ make clean    # wipe the build/ directory
 ## Releases
 
 CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on
-every push and publishes the four libraries as a `linux-native-wrappers.tar.gz`
-asset:
+every push and publishes the four libraries in two configurations, as two
+separate assets on the same release:
+
+| Asset                                | Configuration        |
+| ------------------------------------ | -------------------- |
+| `linux-native-wrappers.tar.gz`       | Release (`-O3 -DNDEBUG`) |
+| `linux-native-wrappers.debug.tar.gz` | Debug (`-O0 -g`)     |
 
 - **Push to `main`** → a public release tagged `v1.0.<run>` and marked *latest*.
 - **PR** → a **draft** release (not public, not *latest*,
   no git tag until published).
 - **Draft PRs** are not built.
 
-The build process of Pulsar for Linux and Magnetar download the 
-`linux-native-wrappers.tar.gz` asset from the latest release;
-it contains the four `.so` files at the archive root.
+The build process of Pulsar for Linux and Magnetar download the
+`linux-native-wrappers.tar.gz` (Release) asset from the latest release;
+each archive contains the four `.so` files at its root. The `.debug` variant
+carries unoptimized, symbol-rich builds for debugging.
 
 ## License
 
