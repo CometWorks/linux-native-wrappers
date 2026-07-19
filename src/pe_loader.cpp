@@ -102,6 +102,14 @@ static pe_image *g_loaded_images[MAX_LOADED_IMAGES] = {};
 static size_t g_loaded_image_count = 0;
 static std::mutex g_loaded_images_mutex;
 
+#ifdef NATIVE_WRAPPERS_TESTING
+void pe_register_loaded_image_for_test(pe_image *image)
+{
+    std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
+    g_loaded_images[g_loaded_image_count++] = image;
+}
+#endif
+
 DWORD WINAPI TlsAlloc();
 
 uintptr_t InitialLocalStorage[1024] = {0};

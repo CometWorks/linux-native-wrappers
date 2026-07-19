@@ -185,16 +185,16 @@ static std::wstring wide_to_string(LPCWSTR value) {
 
 static void *thread_entry(void *arg) {
     auto *info = static_cast<thread_start_info *>(arg);
-    if (!setup_nt_threadinfo(nullptr)) {
-        fprintf(stderr, "thread_entry: setup_nt_threadinfo failed\n");
-        std::abort();
-    }
-    pe_notify_loaded_images(DLL_THREAD_ATTACH);
     auto *thread = info->thread_data;
     pthread_mutex_lock(&thread->mutex);
     thread->thread_id = static_cast<DWORD>(syscall(SYS_gettid));
     pthread_cond_broadcast(&thread->condition);
     pthread_mutex_unlock(&thread->mutex);
+    if (!setup_nt_threadinfo(nullptr)) {
+        fprintf(stderr, "thread_entry: setup_nt_threadinfo failed\n");
+        std::abort();
+    }
+    pe_notify_loaded_images(DLL_THREAD_ATTACH);
     DWORD result = info->start_routine ? info->start_routine(info->parameter) : 0;
     bool destroy_thread = false;
     pthread_mutex_lock(&thread->mutex);

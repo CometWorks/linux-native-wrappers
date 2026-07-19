@@ -68,6 +68,7 @@ jobs:
             cmake -S . -B "$build_dir" -G "Unix Makefiles" \
               -DCMAKE_BUILD_TYPE="$build_type"
             cmake --build "$build_dir" -j "$(nproc)"
+            ctest --test-dir "$build_dir" --output-on-failure
             echo "::endgroup::"
             local out="out-${build_type,,}"
             mkdir -p "$out"

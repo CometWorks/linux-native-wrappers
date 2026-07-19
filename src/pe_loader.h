@@ -448,6 +448,10 @@ void pe_initialize_tls_for_loaded_images(DWORD reason);
 void pe_notify_loaded_images(DWORD reason);
 void pe_ensure_tls_for_loaded_images();
 
+#ifdef NATIVE_WRAPPERS_TESTING
+void pe_register_loaded_image_for_test(struct pe_image *image);
+#endif
+
 generic_func get_export(const char *name);
 void register_function(const char *dll_name, const char *func_name, generic_func func);
 

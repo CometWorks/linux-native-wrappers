@@ -91,5 +91,18 @@ target_compile_options(Havok PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(thread_id_dll_attach_test
+            ${SOURCES}
+            tests/thread_id_dll_attach.cpp
+    )
+    target_compile_definitions(thread_id_dll_attach_test PRIVATE NATIVE_WRAPPERS_TESTING)
+    target_link_libraries(thread_id_dll_attach_test PRIVATE c)
+    target_compile_options(thread_id_dll_attach_test PRIVATE -Wall -fpermissive)
+    add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
+    set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
+endif()
+
 # Install target (optional)
 #install(TARGETS ${PROJECT_NAME} DESTINATION bin)
