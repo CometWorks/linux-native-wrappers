@@ -64,6 +64,7 @@ struct semaphore_handle_data {
 
 struct thread_handle_data {
     pthread_t thread;
+    DWORD thread_id;
     DWORD exit_code;
     bool finished;
     bool closed;
@@ -184,13 +185,17 @@ static std::wstring wide_to_string(LPCWSTR value) {
 
 static void *thread_entry(void *arg) {
     auto *info = static_cast<thread_start_info *>(arg);
+    auto *thread = info->thread_data;
+    pthread_mutex_lock(&thread->mutex);
+    thread->thread_id = static_cast<DWORD>(syscall(SYS_gettid));
+    pthread_cond_broadcast(&thread->condition);
+    pthread_mutex_unlock(&thread->mutex);
     if (!setup_nt_threadinfo(nullptr)) {
         fprintf(stderr, "thread_entry: setup_nt_threadinfo failed\n");
         std::abort();
     }
     pe_notify_loaded_images(DLL_THREAD_ATTACH);
     DWORD result = info->start_routine ? info->start_routine(info->parameter) : 0;
-    auto *thread = info->thread_data;
     bool destroy_thread = false;
     pthread_mutex_lock(&thread->mutex);
     thread->exit_code = result;
@@ -608,7 +613,7 @@ WINAPI DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds) {
 }
 
 WINAPI HANDLE CreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, DWORD (WINAPI *lpStartAddress)(LPVOID), LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId) {
-    auto *thread = new thread_handle_data{.thread = {}, .exit_code = STILL_ACTIVE, .finished = false, .closed = false, .mutex = PTHREAD_MUTEX_INITIALIZER, .condition = PTHREAD_COND_INITIALIZER};
+    auto *thread = new thread_handle_data{.thread = {}, .thread_id = 0, .exit_code = STILL_ACTIVE, .finished = false, .closed = false, .mutex = PTHREAD_MUTEX_INITIALIZER, .condition = PTHREAD_COND_INITIALIZER};
     auto *info = new thread_start_info{lpStartAddress, lpParameter, thread};
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -627,7 +632,12 @@ WINAPI HANDLE CreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwSt
     pthread_attr_destroy(&attr);
     pthread_detach(thread->thread);
     if (lpThreadId) {
-        *lpThreadId = 1;
+        pthread_mutex_lock(&thread->mutex);
+        while (thread->thread_id == 0) {
+            pthread_cond_wait(&thread->condition, &thread->mutex);
+        }
+        *lpThreadId = thread->thread_id;
+        pthread_mutex_unlock(&thread->mutex);
     }
     return reinterpret_cast<HANDLE>(make_handle(handle_kind::thread_handle, thread));
 }
