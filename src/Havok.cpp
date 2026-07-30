@@ -8,10 +8,8 @@
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
-#include <vector>
 
 #include "dll_loader.h"
-#include "HavokThunkRegistry.h"
 
 #define DECLARE_FUNCTION_POINTER(func) static WINAPI func##_t p##func = nullptr;
 
@@ -45,86 +43,490 @@ static void EnsureThreadInfo()
     pe_ensure_tls_for_loaded_images();
 }
 
-static std::mutex g_callback_owner_mutex;
-static std::unordered_map<void *, std::vector<callback_owner_binding>> g_callback_owner_bindings;
-
-void register_callback_owner(void *owner, std::initializer_list<callback_owner_binding> bindings)
+static void *register_static_callback(const char *name, void *target,
+                                      std::atomic_uintptr_t &slot, void *bridge)
 {
-    if (!owner) {
-        return;
+    if (!target) {
+        return nullptr;
     }
-    // fprintf(stderr, "register_callback_owner owner=%p count=%zu\n", owner, bindings.size());
-    std::lock_guard<std::mutex> lock(g_callback_owner_mutex);
-    auto &entry = g_callback_owner_bindings[owner];
-    entry.insert(entry.end(), bindings.begin(), bindings.end());
+    uintptr_t target_bits = reinterpret_cast<uintptr_t>(target);
+    uintptr_t expected = 0;
+    if (!slot.compare_exchange_strong(expected, target_bits,
+                                      std::memory_order_release,
+                                      std::memory_order_acquire)
+        && expected != target_bits) {
+        fprintf(stderr, "FATAL: Havok static callback '%s' changed target "
+                        "from %p to %p\n", name,
+                reinterpret_cast<void *>(expected), target);
+        std::abort();
+    }
+    return bridge;
 }
 
-void release_callback_owner(void *owner)
+using aabb_phantom_added_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_aabb_phantom_added_target{0};
+static void WINAPI aabb_phantom_added_bridge(void* arg0, void* arg1)
 {
-    if (!owner) {
-        return;
+    auto fn = reinterpret_cast<aabb_phantom_added_sysv_t>(
+        g_aabb_phantom_added_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'aabb_phantom_added' has no target\n");
+        std::abort();
     }
-    // fprintf(stderr, "release_callback_owner owner=%p\n", owner);
-    std::lock_guard<std::mutex> lock(g_callback_owner_mutex);
-    auto it = g_callback_owner_bindings.find(owner);
-    if (it == g_callback_owner_bindings.end()) {
-        return;
-    }
-    g_callback_owner_bindings.erase(it);
+    fn(arg0, arg1);
 }
 
-// HkPhantomCallbackShape is the only Havok wrapper that hands Havok a *distinct*
-// native delegate per instance (enter/leave/delete), so each live phantom shape
-// permanently consumes callback-bridge slots. Havok only signals that a shape is
-// gone by invoking its delete callback, so every phantom is handed the single
-// shared delete dispatcher below instead of a per-instance bridged delete. When
-// Havok calls it (with the shape handle) we forward to the managed delete handler
-// and then reclaim the enter/leave bridge slots so later phantoms can reuse them.
+using aabb_phantom_removed_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_aabb_phantom_removed_target{0};
+static void WINAPI aabb_phantom_removed_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<aabb_phantom_removed_sysv_t>(
+        g_aabb_phantom_removed_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'aabb_phantom_removed' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using activation_activate_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_activation_activate_target{0};
+static void WINAPI activation_activate_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<activation_activate_sysv_t>(
+        g_activation_activate_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'activation_activate' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using activation_deactivate_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_activation_deactivate_target{0};
+static void WINAPI activation_deactivate_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<activation_deactivate_sysv_t>(
+        g_activation_deactivate_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'activation_deactivate' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using base_system_log_sysv_t = void (*)(char* arg0);
+static std::atomic_uintptr_t g_base_system_log_target{0};
+static void WINAPI base_system_log_bridge(char* arg0)
+{
+    auto fn = reinterpret_cast<base_system_log_sysv_t>(
+        g_base_system_log_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'base_system_log' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using break_off_logic_sysv_t = int32_t (*)(void* arg0, void* arg1, uint32_t arg2, void* arg3);
+static std::atomic_uintptr_t g_break_off_logic_target{0};
+static int32_t WINAPI break_off_logic_bridge(void* arg0, void* arg1, uint32_t arg2, void* arg3)
+{
+    auto fn = reinterpret_cast<break_off_logic_sysv_t>(
+        g_break_off_logic_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'break_off_logic' has no target\n");
+        std::abort();
+    }
+    return fn(arg0, arg1, arg2, arg3);
+}
+
+using break_off_parts_sysv_t = bool (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_break_off_parts_target{0};
+static bool WINAPI break_off_parts_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<break_off_parts_sysv_t>(
+        g_break_off_parts_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'break_off_parts' has no target\n");
+        std::abort();
+    }
+    return fn(arg0, arg1);
+}
+
+using constraint_added_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_constraint_added_target{0};
+static void WINAPI constraint_added_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<constraint_added_sysv_t>(
+        g_constraint_added_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'constraint_added' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using constraint_breaking_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_constraint_breaking_target{0};
+static void WINAPI constraint_breaking_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<constraint_breaking_sysv_t>(
+        g_constraint_breaking_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'constraint_breaking' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using constraint_reader_sysv_t = void (*)(void* arg0, int32_t arg1, void* arg2);
+static std::atomic_uintptr_t g_constraint_reader_target{0};
+static std::mutex g_constraint_reader_mutex;
+static void WINAPI constraint_reader_bridge(void* arg0, int32_t arg1, void* arg2)
+{
+    auto fn = reinterpret_cast<constraint_reader_sysv_t>(
+        g_constraint_reader_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'constraint_reader' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1, arg2);
+}
+
+using constraint_removed_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_constraint_removed_target{0};
+static void WINAPI constraint_removed_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<constraint_removed_sysv_t>(
+        g_constraint_removed_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'constraint_removed' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using contact_collision_added_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_contact_collision_added_target{0};
+static void WINAPI contact_collision_added_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<contact_collision_added_sysv_t>(
+        g_contact_collision_added_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'contact_collision_added' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using contact_collision_removed_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_contact_collision_removed_target{0};
+static void WINAPI contact_collision_removed_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<contact_collision_removed_sysv_t>(
+        g_contact_collision_removed_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'contact_collision_removed' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using contact_point_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_contact_point_target{0};
+static void WINAPI contact_point_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<contact_point_sysv_t>(
+        g_contact_point_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'contact_point' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using contact_sound_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_contact_sound_target{0};
+static void WINAPI contact_sound_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<contact_sound_sysv_t>(
+        g_contact_sound_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'contact_sound' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using entity_add_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_entity_add_target{0};
+static void WINAPI entity_add_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<entity_add_sysv_t>(
+        g_entity_add_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'entity_add' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using entity_delete_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_entity_delete_target{0};
+static void WINAPI entity_delete_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<entity_delete_sysv_t>(
+        g_entity_delete_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'entity_delete' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using entity_motion_type_change_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_entity_motion_type_change_target{0};
+static void WINAPI entity_motion_type_change_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<entity_motion_type_change_sysv_t>(
+        g_entity_motion_type_change_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'entity_motion_type_change' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using entity_remove_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_entity_remove_target{0};
+static void WINAPI entity_remove_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<entity_remove_sysv_t>(
+        g_entity_remove_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'entity_remove' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using entity_shape_change_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_entity_shape_change_target{0};
+static void WINAPI entity_shape_change_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<entity_shape_change_sysv_t>(
+        g_entity_shape_change_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'entity_shape_change' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using job_thread_action_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_job_thread_action_target{0};
+static void WINAPI job_thread_action_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<job_thread_action_sysv_t>(
+        g_job_thread_action_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'job_thread_action' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using shape_loader_return_sysv_t = void (*)(void* arg0, int32_t arg1);
+static std::atomic_uintptr_t g_shape_loader_return_target{0};
+static std::mutex g_shape_loader_return_mutex;
+static void WINAPI shape_loader_return_bridge(void* arg0, int32_t arg1)
+{
+    auto fn = reinterpret_cast<shape_loader_return_sysv_t>(
+        g_shape_loader_return_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'shape_loader_return' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using task_block_begin_sysv_t = void (*)(char* arg0);
+static std::atomic_uintptr_t g_task_block_begin_target{0};
+static void WINAPI task_block_begin_bridge(char* arg0)
+{
+    auto fn = reinterpret_cast<task_block_begin_sysv_t>(
+        g_task_block_begin_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'task_block_begin' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using task_block_end_sysv_t = void (*)(int64_t arg0);
+static std::atomic_uintptr_t g_task_block_end_target{0};
+static void WINAPI task_block_end_bridge(int64_t arg0)
+{
+    auto fn = reinterpret_cast<task_block_end_sysv_t>(
+        g_task_block_end_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'task_block_end' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using task_finished_sysv_t = void (*)(void);
+static std::atomic_uintptr_t g_task_finished_target{0};
+static void WINAPI task_finished_bridge(void)
+{
+    auto fn = reinterpret_cast<task_finished_sysv_t>(
+        g_task_finished_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'task_finished' has no target\n");
+        std::abort();
+    }
+    fn();
+}
+
+using task_started_sysv_t = void (*)(char* arg0, int32_t arg1);
+static std::atomic_uintptr_t g_task_started_target{0};
+static void WINAPI task_started_bridge(char* arg0, int32_t arg1)
+{
+    auto fn = reinterpret_cast<task_started_sysv_t>(
+        g_task_started_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'task_started' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using uniform_grid_delete_sysv_t = void (*)(void* arg0);
+static std::atomic_uintptr_t g_uniform_grid_delete_target{0};
+static void WINAPI uniform_grid_delete_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<uniform_grid_delete_sysv_t>(
+        g_uniform_grid_delete_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'uniform_grid_delete' has no target\n");
+        std::abort();
+    }
+    fn(arg0);
+}
+
+using uniform_grid_request_sysv_t = void (*)(void* arg0, int32_t arg1);
+static std::atomic_uintptr_t g_uniform_grid_request_target{0};
+static void WINAPI uniform_grid_request_bridge(void* arg0, int32_t arg1)
+{
+    auto fn = reinterpret_cast<uniform_grid_request_sysv_t>(
+        g_uniform_grid_request_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'uniform_grid_request' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
+using wheel_acceleration_sysv_t = float (*)(void* arg0);
+static std::atomic_uintptr_t g_wheel_acceleration_target{0};
+static float WINAPI wheel_acceleration_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<wheel_acceleration_sysv_t>(
+        g_wheel_acceleration_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'wheel_acceleration' has no target\n");
+        std::abort();
+    }
+    return fn(arg0);
+}
+
+using wheel_softness_sysv_t = float (*)(void* arg0);
+static std::atomic_uintptr_t g_wheel_softness_target{0};
+static float WINAPI wheel_softness_bridge(void* arg0)
+{
+    auto fn = reinterpret_cast<wheel_softness_sysv_t>(
+        g_wheel_softness_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'wheel_softness' has no target\n");
+        std::abort();
+    }
+    return fn(arg0);
+}
+
+using world_broad_phase_exit_sysv_t = void (*)(void* arg0, void* arg1);
+static std::atomic_uintptr_t g_world_broad_phase_exit_target{0};
+static void WINAPI world_broad_phase_exit_bridge(void* arg0, void* arg1)
+{
+    auto fn = reinterpret_cast<world_broad_phase_exit_sysv_t>(
+        g_world_broad_phase_exit_target.load(std::memory_order_acquire));
+    if (!fn) {
+        fprintf(stderr, "FATAL: Havok static callback 'world_broad_phase_exit' has no target\n");
+        std::abort();
+    }
+    fn(arg0, arg1);
+}
+
 struct phantom_callback_shape_binding {
-    void *enter;  // managed (SysV) enter callback target
-    void *leave;  // managed (SysV) leave callback target
-    void *del;    // managed (SysV) delete callback target
+    void *enter;
+    void *leave;
+    void *del;
 };
 
 static std::mutex g_phantom_shape_mutex;
 static std::unordered_map<void *, phantom_callback_shape_binding> g_phantom_shape_bindings;
 
-using phantom_delete_sysv_t = void (*)(void *shape);
-
-// One shared MS-ABI callback handed to Havok as the delete handler for EVERY
-// phantom callback shape; Havok invokes it with the shape handle when the shape
-// is destroyed.
-static void WINAPI phantom_delete_dispatch(void *shape)
+static phantom_callback_shape_binding get_phantom_callbacks(void *shape, bool remove)
 {
-    phantom_callback_shape_binding binding{};
-    {
-        std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
-        auto it = g_phantom_shape_bindings.find(shape);
-        if (it == g_phantom_shape_bindings.end()) {
-            return;
-        }
-        binding = it->second;
+    std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
+    auto it = g_phantom_shape_bindings.find(shape);
+    if (it == g_phantom_shape_bindings.end()) {
+        fprintf(stderr, "FATAL: Havok callback for unknown phantom shape %p\n", shape);
+        std::abort();
+    }
+    auto callbacks = it->second;
+    if (remove) {
         g_phantom_shape_bindings.erase(it);
     }
-    // Forward to the managed delete handler (HkDeleteHandler: Instances.Remove).
-    if (binding.del) {
-        reinterpret_cast<phantom_delete_sysv_t>(binding.del)(shape);
-    }
-    // Reclaim the per-instance enter/leave bridge slots. The delete callback is
-    // never bridged (Havok holds this shared dispatcher), so it needs no release.
-    release_void_ptr_ptr(binding.enter);
-    release_void_ptr_ptr(binding.leave);
+    return callbacks;
 }
 
-static void register_phantom_callback_shape(void *shape, void *enter, void *leave, void *del)
+using phantom_handler_sysv_t = void (*)(void *, void *);
+using phantom_delete_sysv_t = void (*)(void *);
+
+static void WINAPI phantom_enter_bridge(void *shape, void *body)
+{
+    auto target = get_phantom_callbacks(shape, false).enter;
+    if (target) {
+        reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
+    }
+}
+
+static void WINAPI phantom_leave_bridge(void *shape, void *body)
+{
+    auto target = get_phantom_callbacks(shape, false).leave;
+    if (target) {
+        reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
+    }
+}
+
+static void WINAPI phantom_delete_bridge(void *shape)
+{
+    auto target = get_phantom_callbacks(shape, true).del;
+    if (target) {
+        reinterpret_cast<phantom_delete_sysv_t>(target)(shape);
+    }
+}
+
+static void register_phantom_callbacks(void *shape, void *enter, void *leave, void *del)
 {
     if (!shape) {
         return;
     }
     std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
-    g_phantom_shape_bindings[shape] = phantom_callback_shape_binding{enter, leave, del};
+    g_phantom_shape_bindings[shape] = {enter, leave, del};
 }
-
 
 
 struct Vector3 {
@@ -2822,9 +3224,7 @@ void Init(const char* dllPath)
 void* HkActivationListener_Create(void* onActivate, void* onDeactivate) { EnsureThreadInfo();
     LOG_CALL(HkActivationListener_Create);
     REQUIRE_FUNCTION_POINTER(HkActivationListener_Create)
-    auto result = pHkActivationListener_Create(bridge_void_ptr(onActivate), bridge_void_ptr(onDeactivate));
-    register_callback_owner(result, {callback_owner_binding{&release_void_ptr, onActivate}, callback_owner_binding{&release_void_ptr, onDeactivate}});
-    return result;
+    return pHkActivationListener_Create(register_static_callback("activation_activate", onActivate, g_activation_activate_target, reinterpret_cast<void *>(&activation_activate_bridge)), register_static_callback("activation_deactivate", onDeactivate, g_activation_deactivate_target, reinterpret_cast<void *>(&activation_deactivate_bridge)));
 }
 
 void* HkBallAndSocketConstraintData_Create(void) { EnsureThreadInfo();
@@ -2842,7 +3242,7 @@ void HkBallAndSocketConstraintData_SetInBodySpaceInternal(void* instance, Vector
 void HkBaseSystem_Init(int32_t solverMemorySize, void* log, bool deepProfiling) { EnsureThreadInfo();
     LOG_CALL(HkBaseSystem_Init);
     REQUIRE_FUNCTION_POINTER(HkBaseSystem_Init)
-    pHkBaseSystem_Init(solverMemorySize, bridge_void_charptr(log), deepProfiling);
+    pHkBaseSystem_Init(solverMemorySize, register_static_callback("base_system_log", log, g_base_system_log_target, reinterpret_cast<void *>(&base_system_log_bridge)), deepProfiling);
 }
 
 void HkBaseSystem_Quit(void) { EnsureThreadInfo();
@@ -2956,7 +3356,7 @@ void HkBoxShape_SetHalfExtents(void* instance, Vector3 value) { EnsureThreadInfo
 void* HkBreakOffPartsUtil_Create(void* breakLogicHandler, void* breakPartsHandler) { EnsureThreadInfo();
     LOG_CALL(HkBreakOffPartsUtil_Create);
     REQUIRE_FUNCTION_POINTER(HkBreakOffPartsUtil_Create)
-    return pHkBreakOffPartsUtil_Create(bridge_int_ptr_ptr_uint_ptr(breakLogicHandler), bridge_bool_ptr_ptr(breakPartsHandler));
+    return pHkBreakOffPartsUtil_Create(register_static_callback("break_off_logic", breakLogicHandler, g_break_off_logic_target, reinterpret_cast<void *>(&break_off_logic_bridge)), register_static_callback("break_off_parts", breakPartsHandler, g_break_off_parts_target, reinterpret_cast<void *>(&break_off_parts_bridge)));
 }
 
 void HkBreakOffPartsUtil_Release(void* instance) { EnsureThreadInfo();
@@ -4012,8 +4412,10 @@ void HkConstraint_AddCenterOfMassModifierAtom(void* instance, Vector3 modifierA,
 void HkConstraint_FindConnectedConstraints(void* rigidBody, void* reader, void* userData) { EnsureThreadInfo();
     LOG_CALL(HkConstraint_FindConnectedConstraints);
     REQUIRE_FUNCTION_POINTER(HkConstraint_FindConnectedConstraints)
-    pHkConstraint_FindConnectedConstraints(rigidBody, bridge_void_ptr_int_ptr(reader), userData);
-    release_void_ptr_int_ptr(reader);
+    std::lock_guard<std::mutex> lock(g_constraint_reader_mutex);
+    g_constraint_reader_target.store(reinterpret_cast<uintptr_t>(reader), std::memory_order_release);
+    pHkConstraint_FindConnectedConstraints(rigidBody, reader ? reinterpret_cast<void *>(&constraint_reader_bridge) : nullptr, userData);
+    g_constraint_reader_target.store(0, std::memory_order_release);
 }
 
 float HkConstraintData_GetMaximumLinearImpulse(void* instance) { EnsureThreadInfo();
@@ -4085,7 +4487,7 @@ void HkConstraintListener_Release(void* instance) { EnsureThreadInfo();
 void HkConstraintListener_SetCallbacks(void* instance, void* onAdded, void* onRemoved, void* onBreaking) { EnsureThreadInfo();
     LOG_CALL(HkConstraintListener_SetCallbacks);
     REQUIRE_FUNCTION_POINTER(HkConstraintListener_SetCallbacks)
-    pHkConstraintListener_SetCallbacks(instance, bridge_void_ptr(onAdded), bridge_void_ptr(onRemoved), bridge_void_ptr(onBreaking));
+    pHkConstraintListener_SetCallbacks(instance, register_static_callback("constraint_added", onAdded, g_constraint_added_target, reinterpret_cast<void *>(&constraint_added_bridge)), register_static_callback("constraint_removed", onRemoved, g_constraint_removed_target, reinterpret_cast<void *>(&constraint_removed_bridge)), register_static_callback("constraint_breaking", onBreaking, g_constraint_breaking_target, reinterpret_cast<void *>(&constraint_breaking_bridge)));
 }
 
 void* HkConstraintProjectorListener_Create(void* world) { EnsureThreadInfo();
@@ -4109,9 +4511,7 @@ int32_t HkConstraintStabilizationUtil_StabilizeRagdollInertias(void* physicsSyst
 void* HkContactListener_Create(void* onContact, void* collisionAdded, void* collisionRemoved, int32_t callbackLimit) { EnsureThreadInfo();
     LOG_CALL(HkContactListener_Create);
     REQUIRE_FUNCTION_POINTER(HkContactListener_Create)
-    auto result = pHkContactListener_Create(bridge_void_ptr_ptr(onContact), bridge_void_ptr_ptr(collisionAdded), bridge_void_ptr_ptr(collisionRemoved), callbackLimit);
-    register_callback_owner(result, {callback_owner_binding{&release_void_ptr_ptr, onContact}, callback_owner_binding{&release_void_ptr_ptr, collisionAdded}, callback_owner_binding{&release_void_ptr_ptr, collisionRemoved}});
-    return result;
+    return pHkContactListener_Create(register_static_callback("contact_point", onContact, g_contact_point_target, reinterpret_cast<void *>(&contact_point_bridge)), register_static_callback("contact_collision_added", collisionAdded, g_contact_collision_added_target, reinterpret_cast<void *>(&contact_collision_added_bridge)), register_static_callback("contact_collision_removed", collisionRemoved, g_contact_collision_removed_target, reinterpret_cast<void *>(&contact_collision_removed_bridge)), callbackLimit);
 }
 
 void HkContactListener_SetCallbackLimit(void* instance, int32_t value) { EnsureThreadInfo();
@@ -4405,9 +4805,7 @@ void HkContactPointProperties_GetFieldOffsets(void* userDataOffset) { EnsureThre
 void* HkContactSoundListener_Create(void* onContact) { EnsureThreadInfo();
     LOG_CALL(HkContactSoundListener_Create);
     REQUIRE_FUNCTION_POINTER(HkContactSoundListener_Create)
-    auto result = pHkContactSoundListener_Create(bridge_void_ptr_ptr(onContact));
-    register_callback_owner(result, {callback_owner_binding{&release_void_ptr_ptr, onContact}});
-    return result;
+    return pHkContactSoundListener_Create(register_static_callback("contact_sound", onContact, g_contact_sound_target, reinterpret_cast<void *>(&contact_sound_bridge)));
 }
 
 void* HkConvexShape_GetConvexShapeFromCompoundShape(void* shape, int32_t shapeIndex) { EnsureThreadInfo();
@@ -4917,16 +5315,13 @@ void HkEntity_GetFieldOffsets(void* userDataOffset, void* transformOffset, void*
 void* HkEntityListener_Create(void* onAdd, void* onRemove, void* onDelete, void* onShapeChange, void* onMotionTypeChange) { EnsureThreadInfo();
     LOG_CALL(HkEntityListener_Create);
     REQUIRE_FUNCTION_POINTER(HkEntityListener_Create)
-    auto result = pHkEntityListener_Create(bridge_void_ptr_ptr(onAdd), bridge_void_ptr_ptr(onRemove), bridge_void_ptr_ptr(onDelete), bridge_void_ptr_ptr(onShapeChange), bridge_void_ptr_ptr(onMotionTypeChange));
-    register_callback_owner(result, {callback_owner_binding{&release_void_ptr_ptr, onAdd}, callback_owner_binding{&release_void_ptr_ptr, onRemove}, callback_owner_binding{&release_void_ptr_ptr, onDelete}, callback_owner_binding{&release_void_ptr_ptr, onShapeChange}, callback_owner_binding{&release_void_ptr_ptr, onMotionTypeChange}});
-    return result;
+    return pHkEntityListener_Create(register_static_callback("entity_add", onAdd, g_entity_add_target, reinterpret_cast<void *>(&entity_add_bridge)), register_static_callback("entity_remove", onRemove, g_entity_remove_target, reinterpret_cast<void *>(&entity_remove_bridge)), register_static_callback("entity_delete", onDelete, g_entity_delete_target, reinterpret_cast<void *>(&entity_delete_bridge)), register_static_callback("entity_shape_change", onShapeChange, g_entity_shape_change_target, reinterpret_cast<void *>(&entity_shape_change_bridge)), register_static_callback("entity_motion_type_change", onMotionTypeChange, g_entity_motion_type_change_target, reinterpret_cast<void *>(&entity_motion_type_change_bridge)));
 }
 
 void HkEntityListener_Release(void* entityListener) { EnsureThreadInfo();
     LOG_CALL(HkEntityListener_Release);
     REQUIRE_FUNCTION_POINTER(HkEntityListener_Release)
     pHkEntityListener_Release(entityListener);
-    release_callback_owner(entityListener);
 }
 
 void* HkFixedConstraintData_Create(void) { EnsureThreadInfo();
@@ -5197,7 +5592,6 @@ void HkGlobal_ReleasePtr(void* ptr) { EnsureThreadInfo();
     LOG_CALL(HkGlobal_ReleasePtr);
     REQUIRE_FUNCTION_POINTER(HkGlobal_ReleasePtr)
     pHkGlobal_ReleasePtr(ptr);
-    release_callback_owner(ptr);
 }
 
 void HkGlobal_ReleaseString(void* ptr) { EnsureThreadInfo();
@@ -5353,7 +5747,7 @@ void HkJobThreadPool_RemoveReference(void* instance) { EnsureThreadInfo();
 void HkJobThreadPool_RunOnEachWorker(void* instance, void* action, void* data) { EnsureThreadInfo();
     LOG_CALL(HkJobThreadPool_RunOnEachWorker);
     REQUIRE_FUNCTION_POINTER(HkJobThreadPool_RunOnEachWorker)
-    pHkJobThreadPool_RunOnEachWorker(instance, bridge_void_ptr(action), data);
+    pHkJobThreadPool_RunOnEachWorker(instance, register_static_callback("job_thread_action", action, g_job_thread_action_target, reinterpret_cast<void *>(&job_thread_action_bridge)), data);
 }
 
 void HkJobThreadPool_ExecuteJobQueue(void* instance, void* jobQueue) { EnsureThreadInfo();
@@ -5689,10 +6083,8 @@ void HkMotion_SetDeactivationClass(void* instance, int32_t value) { EnsureThread
 void* HkPhantomCallbackShape_Create(void* enterCallback, void* leaveCallback, void* deleteCallback) { EnsureThreadInfo();
     LOG_CALL(HkPhantomCallbackShape_Create);
     REQUIRE_FUNCTION_POINTER(HkPhantomCallbackShape_Create)
-    void *enterThunk = bridge_void_ptr_ptr(enterCallback);
-    void *leaveThunk = bridge_void_ptr_ptr(leaveCallback);
-    auto result = pHkPhantomCallbackShape_Create(enterThunk, leaveThunk, reinterpret_cast<void *>(&phantom_delete_dispatch));
-    register_phantom_callback_shape(result, enterCallback, leaveCallback, deleteCallback);
+    auto result = pHkPhantomCallbackShape_Create(enterCallback ? reinterpret_cast<void *>(&phantom_enter_bridge) : nullptr, leaveCallback ? reinterpret_cast<void *>(&phantom_leave_bridge) : nullptr, deleteCallback ? reinterpret_cast<void *>(&phantom_delete_bridge) : nullptr);
+    register_phantom_callbacks(result, enterCallback, leaveCallback, deleteCallback);
     return result;
 }
 
@@ -6911,8 +7303,10 @@ bool HkShapeLoader_SaveShapesListToFile(const char* fileName, void* listShapes, 
 bool HkShapeLoader_CleanupShapesBuffer(int32_t cBuffer, void* buffer, void* returnByteArray) { EnsureThreadInfo();
     LOG_CALL(HkShapeLoader_CleanupShapesBuffer);
     REQUIRE_FUNCTION_POINTER(HkShapeLoader_CleanupShapesBuffer)
-    auto result = pHkShapeLoader_CleanupShapesBuffer(cBuffer, buffer, bridge_void_ptr_int(returnByteArray));
-    release_void_ptr_int(returnByteArray);
+    std::lock_guard<std::mutex> lock(g_shape_loader_return_mutex);
+    g_shape_loader_return_target.store(reinterpret_cast<uintptr_t>(returnByteArray), std::memory_order_release);
+    auto result = pHkShapeLoader_CleanupShapesBuffer(cBuffer, buffer, returnByteArray ? reinterpret_cast<void *>(&shape_loader_return_bridge) : nullptr);
+    g_shape_loader_return_target.store(0, std::memory_order_release);
     return result;
 }
 
@@ -7153,7 +7547,7 @@ bool HkStaticCompoundShape_IsShapeKeyEnabled(void* instance, uint32_t key) { Ens
 void HkTaskProfiler_Init(void* onTaskStarted, void* onTaskFinished) { EnsureThreadInfo();
     LOG_CALL(HkTaskProfiler_Init);
     REQUIRE_FUNCTION_POINTER(HkTaskProfiler_Init)
-    pHkTaskProfiler_Init(bridge_void_charptr_int(onTaskStarted), bridge_void_void(onTaskFinished));
+    pHkTaskProfiler_Init(register_static_callback("task_started", onTaskStarted, g_task_started_target, reinterpret_cast<void *>(&task_started_bridge)), register_static_callback("task_finished", onTaskFinished, g_task_finished_target, reinterpret_cast<void *>(&task_finished_bridge)));
 }
 
 void HkTaskProfiler_ReleaseResources(void) { EnsureThreadInfo();
@@ -7171,7 +7565,7 @@ void HkTaskProfiler_HookJobQueue(void* jobQueue) { EnsureThreadInfo();
 void HkTaskProfiler_ReplayTimers(void* blockBegin, void* blockEnd) { EnsureThreadInfo();
     LOG_CALL(HkTaskProfiler_ReplayTimers);
     REQUIRE_FUNCTION_POINTER(HkTaskProfiler_ReplayTimers)
-    pHkTaskProfiler_ReplayTimers(bridge_void_charptr(blockBegin), bridge_void_i64(blockEnd));
+    pHkTaskProfiler_ReplayTimers(register_static_callback("task_block_begin", blockBegin, g_task_block_begin_target, reinterpret_cast<void *>(&task_block_begin_bridge)), register_static_callback("task_block_end", blockEnd, g_task_block_end_target, reinterpret_cast<void *>(&task_block_end_bridge)));
 }
 
 void HkTaskProfiler_Begin1(void) { EnsureThreadInfo();
@@ -7327,7 +7721,7 @@ void* HkUniformGridShape_GetChild(void* instance, int32_t x, int32_t y, int32_t 
 void HkUniformGridShape_SetDeleteHandler(void* instance, void* handler) { EnsureThreadInfo();
     LOG_CALL(HkUniformGridShape_SetDeleteHandler);
     REQUIRE_FUNCTION_POINTER(HkUniformGridShape_SetDeleteHandler)
-    pHkUniformGridShape_SetDeleteHandler(instance, bridge_void_ptr(handler));
+    pHkUniformGridShape_SetDeleteHandler(instance, register_static_callback("uniform_grid_delete", handler, g_uniform_grid_delete_target, reinterpret_cast<void *>(&uniform_grid_delete_bridge)));
 }
 
 void HkUniformGridShape_RemoveShapeRequestHandler(void* instance) { EnsureThreadInfo();
@@ -7339,7 +7733,7 @@ void HkUniformGridShape_RemoveShapeRequestHandler(void* instance) { EnsureThread
 void HkUniformGridShape_SetShapeRequestHandler(void* instance, void* blockingCallback) { EnsureThreadInfo();
     LOG_CALL(HkUniformGridShape_SetShapeRequestHandler);
     REQUIRE_FUNCTION_POINTER(HkUniformGridShape_SetShapeRequestHandler)
-    pHkUniformGridShape_SetShapeRequestHandler(instance, bridge_void_ptr_int(blockingCallback));
+    pHkUniformGridShape_SetShapeRequestHandler(instance, register_static_callback("uniform_grid_request", blockingCallback, g_uniform_grid_request_target, reinterpret_cast<void *>(&uniform_grid_request_bridge)));
 }
 
 void HkUniformGridShape_EnableExtendedCache(void* instance) { EnsureThreadInfo();
@@ -7525,7 +7919,7 @@ void HkWheelConstraintData_SetSteeringAngle(void* instance, float value) { Ensur
 void* HkWheelResponseModifierUtil_Create(void* rigidBody, void* softness, void* acceleration) { EnsureThreadInfo();
     LOG_CALL(HkWheelResponseModifierUtil_Create);
     REQUIRE_FUNCTION_POINTER(HkWheelResponseModifierUtil_Create)
-    return pHkWheelResponseModifierUtil_Create(rigidBody, bridge_float_ptr(softness), bridge_float_ptr(acceleration));
+    return pHkWheelResponseModifierUtil_Create(rigidBody, register_static_callback("wheel_softness", softness, g_wheel_softness_target, reinterpret_cast<void *>(&wheel_softness_bridge)), register_static_callback("wheel_acceleration", acceleration, g_wheel_acceleration_target, reinterpret_cast<void *>(&wheel_acceleration_bridge)));
 }
 
 void HkWheelResponseModifierUtil_Release(void* instance) { EnsureThreadInfo();
@@ -7537,13 +7931,13 @@ void HkWheelResponseModifierUtil_Release(void* instance) { EnsureThreadInfo();
 void* HkWorld_Create(bool enableGlobalGravity, float broadphaseCubeSideLength, float contactRestingVelocity, bool enableMultithreading, int32_t solverIterations, void* broadPhaseCallback) { EnsureThreadInfo();
     LOG_CALL(HkWorld_Create);
     REQUIRE_FUNCTION_POINTER(HkWorld_Create)
-    return pHkWorld_Create(enableGlobalGravity, broadphaseCubeSideLength, contactRestingVelocity, enableMultithreading, solverIterations, bridge_void_ptr_ptr(broadPhaseCallback));
+    return pHkWorld_Create(enableGlobalGravity, broadphaseCubeSideLength, contactRestingVelocity, enableMultithreading, solverIterations, register_static_callback("world_broad_phase_exit", broadPhaseCallback, g_world_broad_phase_exit_target, reinterpret_cast<void *>(&world_broad_phase_exit_bridge)));
 }
 
 void* HkWorld_CreateCInfo(void* cInfo, void* broadPhaseCallback) { EnsureThreadInfo();
     LOG_CALL(HkWorld_CreateCInfo);
     REQUIRE_FUNCTION_POINTER(HkWorld_CreateCInfo)
-    return pHkWorld_CreateCInfo(cInfo, bridge_void_ptr_ptr(broadPhaseCallback));
+    return pHkWorld_CreateCInfo(cInfo, register_static_callback("world_broad_phase_exit", broadPhaseCallback, g_world_broad_phase_exit_target, reinterpret_cast<void *>(&world_broad_phase_exit_bridge)));
 }
 
 void* HkWorld_CreateBodyPairCollection(void) { EnsureThreadInfo();
@@ -7975,9 +8369,7 @@ bool HkGroupFilter_IsCollisionEnabled(void* filter, uint32_t colllinfo1, uint32_
 void* HkpAabbPhantom_Create(Vector3 min, Vector3 max, uint32_t collisionFilterInfo, void* collidableAddedD, void* collidableRemovedD) { EnsureThreadInfo();
     LOG_CALL(HkpAabbPhantom_Create);
     REQUIRE_FUNCTION_POINTER(HkpAabbPhantom_Create)
-    auto result = pHkpAabbPhantom_Create(min, max, collisionFilterInfo, bridge_void_ptr_ptr(collidableAddedD), bridge_void_ptr_ptr(collidableRemovedD));
-    register_callback_owner(result, {callback_owner_binding{&release_void_ptr_ptr, collidableAddedD}, callback_owner_binding{&release_void_ptr_ptr, collidableRemovedD}});
-    return result;
+    return pHkpAabbPhantom_Create(min, max, collisionFilterInfo, register_static_callback("aabb_phantom_added", collidableAddedD, g_aabb_phantom_added_target, reinterpret_cast<void *>(&aabb_phantom_added_bridge)), register_static_callback("aabb_phantom_removed", collidableRemovedD, g_aabb_phantom_removed_target, reinterpret_cast<void *>(&aabb_phantom_removed_bridge)));
 }
 
 void HkpAabbPhantom_GetAabb(void* instance, void* min, void* max) { EnsureThreadInfo();
@@ -7996,7 +8388,6 @@ void HkpAabbPhantom_Release(void* instance) { EnsureThreadInfo();
     LOG_CALL(HkpAabbPhantom_Release);
     REQUIRE_FUNCTION_POINTER(HkpAabbPhantom_Release)
     pHkpAabbPhantom_Release(instance);
-    release_callback_owner(instance);
 }
 
 void* HkpCollidableAddedEvent_GetRigidBody(void* instance) { EnsureThreadInfo();

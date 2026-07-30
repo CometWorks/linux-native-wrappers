@@ -17,8 +17,6 @@ set(SOURCES
 # Include directories
 include_directories(src)
 
-file(GLOB HAVOK_THUNK_SOURCES "src/HavokThunk_*.cpp")
-
 # Add executable
 add_executable(
         ${PROJECT_NAME}
@@ -43,7 +41,6 @@ add_library(
         SHARED
         ${SOURCES}
         src/Havok.cpp
-        ${HAVOK_THUNK_SOURCES}
 )
 
 set_target_properties(RecastDetour PROPERTIES
@@ -93,6 +90,14 @@ target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
 
 include(CTest)
 if(BUILD_TESTING)
+    find_program(PYTHON3_EXECUTABLE python3)
+    if(NOT PYTHON3_EXECUTABLE)
+        message(FATAL_ERROR "python3 is required for the Havok generator test")
+    endif()
+
+    add_test(NAME havok_generator
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/havok_generator.py)
+
     add_executable(thread_id_dll_attach_test
             ${SOURCES}
             tests/thread_id_dll_attach.cpp

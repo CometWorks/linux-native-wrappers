@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Generate the Havok wrapper sources: src/Havok.cpp, src/HavokThunk_*.cpp and
-src/HavokThunkRegistry.h.
+"""Generate the Havok wrapper source: src/Havok.cpp.
 
 `Havok.cpp` is a thin C++ shim: one `extern "C"` function per Havok.dll export,
 parsed from the game's decompiled `[DllImport]` declarations. Delegate arguments
-are routed through the callback bridge (the thunk sources) so managed (SysV)
-callbacks can be handed to the Microsoft-ABI Havok.dll.
+are routed through fixed callback bridges so managed (SysV) callbacks can be
+handed to the Microsoft-ABI Havok.dll.
 
-Unlike the thunk sources, generating `Havok.cpp` needs the decompiled C# wrapper
+Generating `Havok.cpp` needs the decompiled C# wrapper
 (`../dotnet-game-local/HavokWrapper/Havok`); the public repo ships the generated
 output so a plain build needs no such dependency.
 
@@ -22,9 +21,8 @@ PROJECTS_DIR = PROJECT_DIR.parent
 
 CS_ROOT = PROJECTS_DIR / 'dotnet-game-local/HavokWrapper/Havok'
 
-THUNK_DIR = PROJECT_DIR / 'src'
-OUTPUT = THUNK_DIR / 'Havok.cpp'
-THUNK_HEADER = THUNK_DIR / 'HavokThunkRegistry.h'
+SRC_DIR = PROJECT_DIR / 'src'
+OUTPUT = SRC_DIR / 'Havok.cpp'
 
 PRIMITIVES = {
     'void': 'void',
@@ -56,6 +54,12 @@ KNOWN_VALUE_TYPES = {
     'HkActionType': 'int32_t',
     'HkTaskType': 'int32_t',
 }
+
+for qualified_name, cpp_type in list(KNOWN_VALUE_TYPES.items()):
+    short_name = qualified_name.rsplit('.', 1)[-1]
+    previous = KNOWN_VALUE_TYPES.setdefault(short_name, cpp_type)
+    if previous != cpp_type:
+        raise ValueError(f'Ambiguous Havok value type name: {short_name}')
 
 ALL_DELEGATE_TYPES = {
     'HkActivationListener.HkActivationHandlerCpp',
@@ -121,6 +125,15 @@ DELEGATE_FAMILIES = {
     'HkpAabbPhantom.CollidableRemovedD': 'void_ptr_ptr',
 }
 
+# Decompiled nested declarations use either `Owner.Delegate` or the short name,
+# depending on the decompiler version.
+for qualified_name, family in list(DELEGATE_FAMILIES.items()):
+    short_name = qualified_name.rsplit('.', 1)[-1]
+    previous = DELEGATE_FAMILIES.setdefault(short_name, family)
+    if previous != family:
+        raise ValueError(f'Ambiguous Havok delegate name: {short_name}')
+ALL_DELEGATE_TYPES.update(DELEGATE_FAMILIES)
+
 FAMILY_SIGNATURES = {
     'void_ptr': ('void', 'void* arg0', 'arg0'),
     'void_charptr': ('void', 'char* arg0', 'arg0'),
@@ -135,112 +148,77 @@ FAMILY_SIGNATURES = {
     'float_ptr': ('float', 'void* arg0', 'arg0'),
 }
 
-# Per-family bridge slot counts. Each slot is one compile-time-instantiated thunk,
-# baked into the generated source and fixed per build (no run-time growth without
-# JIT trampolines), so each family is sized to its worst-case peak of *distinct
-# concurrently-live* callback pointers. That peak depends on how the game's wrapper
-# marshals the delegate (see docs/HavokCallbackBridge.md):
-#
-#   * A delegate held in a `static readonly` field marshals to ONE shared pointer
-#     regardless of instance count (dispatch is via the handle passed as arg0), so
-#     families whose producers are all static have a tiny fixed peak:
-#       - exactly one distinct pointer -> a single slot (collapsed, non-collection
-#         bridge; see emit_bridge_single)
-#       - a few distinct pointers      -> smallest power of two >= 16x that peak
-#   * HkPhantomCallbackShape is the ONLY per-instance producer: 2 void_ptr_ptr slots
-#     (enter/leave) per live phantom shape. The game makes one per trigger/detector
-#     volume (connectors + ejectors, collectors, gravity generators, merge blocks,
-#     safe zones), so void_ptr_ptr scales with block count -> 32768. The reclaim
-#     (see OWNER_HELPERS) frees these on shape destruction, so 32768 bounds the
-#     *concurrent* live phantom count. The delete callback is NOT bridged (one
-#     shared dispatcher), so void_ptr has no per-instance producer.
-#   * void_ptr_int also carries a fresh per-call callback (HkShapeLoader cleanup)
-#     that Havok invokes only synchronously, so its slot is released right after the
-#     call (see SYNC_RELEASE_ARGS); it is sized for loader concurrency, not a fixed
-#     static count.
-DEFAULT_CALLBACK_SLOTS = 64
-
-CALLBACK_SLOTS = {
-    # per-instance, reclaimed on destroy -> bounds concurrent live phantom shapes
-    'void_ptr_ptr':         32768,
-    # peak 7 static pointers (2 activation + 3 constraint + jobpool + uniformgrid delete) -> 16x -> 128
-    'void_ptr':             128,
-    # 1 retained static (voxel batch handler) + released-after-call transients; sized for loader concurrency
-    'void_ptr_int':         128,
-    # ConstraintReader: a fresh native thunk per world load (the delegate is NOT a
-    # process-wide singleton), invoked only synchronously and released right after
-    # the call (see SYNC_RELEASE_ARGS), so it never accumulates across loads; sized
-    # for FindConnectedConstraints call concurrency, not a fixed static count.
-    'void_ptr_int_ptr':     128,
-    # peak 2 static pointers (log + profiler block-begin) -> 16x -> 32
-    'void_charptr':         32,
-    # peak 2 static pointers (wheel softness + acceleration) -> 16x -> 32
-    'float_ptr':            32,
-    # exactly 1 static pointer each -> single collapsed slot (see emit_bridge_single)
-    'void_charptr_int':     1,  # HkTaskProfiler.TaskStartedFuncCpp
-    'void_i64':             1,  # HkTaskProfiler.BlockEndFunc
-    'void_void':            1,  # HkTaskProfiler.TaskFinishedFunc
-    'bool_ptr_ptr':         1,  # HkBreakOffPartsUtil.BreakPartsHandler
-    'int_ptr_ptr_uint_ptr': 1,  # HkBreakOffPartsUtil.BreakLogicHandler
+# These callbacks reuse the exact rooted delegate object under CoreCLR, so each
+# semantic callback can use one process-lifetime target and one fixed MS-ABI bridge.
+# Keep separate bridge names for methods which share a C signature.
+STATIC_CALLBACKS = {
+    'HkActivationListener_Create': {
+        'onActivate': 'activation_activate',
+        'onDeactivate': 'activation_deactivate',
+    },
+    'HkBaseSystem_Init': {'log': 'base_system_log'},
+    'HkBreakOffPartsUtil_Create': {
+        'breakLogicHandler': 'break_off_logic',
+        'breakPartsHandler': 'break_off_parts',
+    },
+    'HkConstraintListener_SetCallbacks': {
+        'onAdded': 'constraint_added',
+        'onRemoved': 'constraint_removed',
+        'onBreaking': 'constraint_breaking',
+    },
+    'HkContactListener_Create': {
+        'onContact': 'contact_point',
+        'collisionAdded': 'contact_collision_added',
+        'collisionRemoved': 'contact_collision_removed',
+    },
+    'HkContactSoundListener_Create': {'onContact': 'contact_sound'},
+    'HkEntityListener_Create': {
+        'onAdd': 'entity_add',
+        'onRemove': 'entity_remove',
+        'onDelete': 'entity_delete',
+        'onShapeChange': 'entity_shape_change',
+        'onMotionTypeChange': 'entity_motion_type_change',
+    },
+    'HkJobThreadPool_RunOnEachWorker': {'action': 'job_thread_action'},
+    'HkTaskProfiler_Init': {
+        'onTaskStarted': 'task_started',
+        'onTaskFinished': 'task_finished',
+    },
+    'HkTaskProfiler_ReplayTimers': {
+        'blockBegin': 'task_block_begin',
+        'blockEnd': 'task_block_end',
+    },
+    'HkUniformGridShape_SetDeleteHandler': {'handler': 'uniform_grid_delete'},
+    'HkUniformGridShape_SetShapeRequestHandler': {'blockingCallback': 'uniform_grid_request'},
+    'HkWheelResponseModifierUtil_Create': {
+        'softness': 'wheel_softness',
+        'acceleration': 'wheel_acceleration',
+    },
+    'HkWorld_Create': {'broadPhaseCallback': 'world_broad_phase_exit'},
+    'HkWorld_CreateCInfo': {'broadPhaseCallback': 'world_broad_phase_exit'},
+    'HkpAabbPhantom_Create': {
+        'collidableAddedD': 'aabb_phantom_added',
+        'collidableRemovedD': 'aabb_phantom_removed',
+    },
 }
 
-
-def slots_for(family_name):
-    return CALLBACK_SLOTS.get(family_name, DEFAULT_CALLBACK_SLOTS)
-
-
-OWNER_CALLBACKS = {
-    'HkActivationListener_Create': [('void_ptr', 'onActivate'), ('void_ptr', 'onDeactivate')],
-    'HkContactListener_Create': [('void_ptr_ptr', 'onContact'), ('void_ptr_ptr', 'collisionAdded'), ('void_ptr_ptr', 'collisionRemoved')],
-    'HkContactSoundListener_Create': [('void_ptr_ptr', 'onContact')],
-    'HkEntityListener_Create': [('void_ptr_ptr', 'onAdd'), ('void_ptr_ptr', 'onRemove'), ('void_ptr_ptr', 'onDelete'), ('void_ptr_ptr', 'onShapeChange'), ('void_ptr_ptr', 'onMotionTypeChange')],
-    'HkpAabbPhantom_Create': [('void_ptr_ptr', 'collidableAddedD'), ('void_ptr_ptr', 'collidableRemovedD')],
+# These callbacks are invoked synchronously. A fixed bridge plus a mutex serializes
+# each short native call without executable thunks.
+TRANSIENT_CALLBACKS = {
+    'HkConstraint_FindConnectedConstraints': {'reader': 'constraint_reader'},
+    'HkShapeLoader_CleanupShapesBuffer': {'returnByteArray': 'shape_loader_return'},
 }
 
-OWNER_RELEASE_FUNCS = {
-    'HkGlobal_ReleasePtr',
-    'HkEntityListener_Release',
-    'HkpAabbPhantom_Release',
-}
-
-# HkPhantomCallbackShape marshals a distinct native delegate per instance, so each
-# live phantom shape permanently consumes bridge slots. Havok only signals that a
-# shape is gone by invoking its delete callback, so these creators get special
-# emission (see emit_phantom_create) that routes the delete through a shared
-# dispatcher which reclaims the enter/leave slots. Keep in sync with the
-# HkPhantomHandlerCpp / HkDeleteHandler argument order.
-PHANTOM_SHAPE_CREATE_FUNCS = {
-    'HkPhantomCallbackShape_Create',
-}
-
-# Functions that marshal a fresh delegate on every call which Havok invokes only
-# *synchronously* during the call and never retains. Their bridge slot is released
-# as soon as the call returns, so the transient delegate does not leak a slot per
-# call (as opposed to a per-instance callback, which lives until its owner dies).
-# Only list an argument here after verifying in the C# wrapper that Havok does not
-# store the pointer past the call -- releasing a retained callback would free a
-# slot Havok still calls into. Maps function -> list of its delegate arg names.
-#
-#   * HkShapeLoader_CleanupShapesBuffer.returnByteArray: a capturing lambda that
-#     Havok calls once to hand back the cleaned buffer, then discards.
-# NOT included, and why:
-#   * HkUniformGridShape_SetShapeRequestHandler.blockingCallback: RETAINED -- Havok
-#     calls it later for lazy voxel-batch loading (it is a shared static delegate,
-#     so it occupies just one deduplicated slot anyway).
-#   * HkConstraint_FindConnectedConstraints.reader: ConstraintReader. The C# side
-#     marshals a fresh native thunk per world load (the method-group delegate is NOT
-#     a process-wide singleton), so without release the first load's thunk stays
-#     pinned live forever and the second load aborts the single-slot family. Havok
-#     invokes it only synchronously to fill the list and never retains it past the
-#     call (see HkConstraint.GetAttachedConstraints), so release it right after.
-SYNC_RELEASE_ARGS = {
-    'HkShapeLoader_CleanupShapesBuffer': ['returnByteArray'],
-    'HkConstraint_FindConnectedConstraints': ['reader'],
-}
+PHANTOM_CALLBACK_CREATE = 'HkPhantomCallbackShape_Create'
 
 EXPORT_ALIASES = {
     'HkJobThreadPool_RemoveReference': '?HkJobThreadPool_RemoveReference@Havok@@YAXPEAVhkThreadPool@@@Z',
 }
+
+PINVOKE_SIGNATURE = re.compile(
+    r'(?:public|protected(?:\s+internal)?|internal|private)\s+'
+    r'(?:unsafe\s+)?static\s+extern\s+([^\s]+(?:\.[^\s]+)?)\s+'
+    r'(\w+)\((.*)\);')
 
 PREAMBLE = '''#include <cstdint>
 #include <cstddef>
@@ -252,10 +230,8 @@ PREAMBLE = '''#include <cstdint>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
-#include <vector>
 
 #include "dll_loader.h"
-#include "HavokThunkRegistry.h"
 
 #define DECLARE_FUNCTION_POINTER(func) static WINAPI func##_t p##func = nullptr;
 
@@ -290,86 +266,65 @@ static void EnsureThreadInfo()
 }
 '''
 
-OWNER_HELPERS = '''static std::mutex g_callback_owner_mutex;
-static std::unordered_map<void *, std::vector<callback_owner_binding>> g_callback_owner_bindings;
-
-void register_callback_owner(void *owner, std::initializer_list<callback_owner_binding> bindings)
-{
-    if (!owner) {
-        return;
-    }
-    // fprintf(stderr, "register_callback_owner owner=%p count=%zu\\n", owner, bindings.size());
-    std::lock_guard<std::mutex> lock(g_callback_owner_mutex);
-    auto &entry = g_callback_owner_bindings[owner];
-    entry.insert(entry.end(), bindings.begin(), bindings.end());
-}
-
-void release_callback_owner(void *owner)
-{
-    if (!owner) {
-        return;
-    }
-    // fprintf(stderr, "release_callback_owner owner=%p\\n", owner);
-    std::lock_guard<std::mutex> lock(g_callback_owner_mutex);
-    auto it = g_callback_owner_bindings.find(owner);
-    if (it == g_callback_owner_bindings.end()) {
-        return;
-    }
-    g_callback_owner_bindings.erase(it);
-}
-
-// HkPhantomCallbackShape is the only Havok wrapper that hands Havok a *distinct*
-// native delegate per instance (enter/leave/delete), so each live phantom shape
-// permanently consumes callback-bridge slots. Havok only signals that a shape is
-// gone by invoking its delete callback, so every phantom is handed the single
-// shared delete dispatcher below instead of a per-instance bridged delete. When
-// Havok calls it (with the shape handle) we forward to the managed delete handler
-// and then reclaim the enter/leave bridge slots so later phantoms can reuse them.
-struct phantom_callback_shape_binding {
-    void *enter;  // managed (SysV) enter callback target
-    void *leave;  // managed (SysV) leave callback target
-    void *del;    // managed (SysV) delete callback target
+PHANTOM_CALLBACK_HELPERS = '''struct phantom_callback_shape_binding {
+    void *enter;
+    void *leave;
+    void *del;
 };
 
 static std::mutex g_phantom_shape_mutex;
 static std::unordered_map<void *, phantom_callback_shape_binding> g_phantom_shape_bindings;
 
-using phantom_delete_sysv_t = void (*)(void *shape);
-
-// One shared MS-ABI callback handed to Havok as the delete handler for EVERY
-// phantom callback shape; Havok invokes it with the shape handle when the shape
-// is destroyed.
-static void WINAPI phantom_delete_dispatch(void *shape)
+static phantom_callback_shape_binding get_phantom_callbacks(void *shape, bool remove)
 {
-    phantom_callback_shape_binding binding{};
-    {
-        std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
-        auto it = g_phantom_shape_bindings.find(shape);
-        if (it == g_phantom_shape_bindings.end()) {
-            return;
-        }
-        binding = it->second;
+    std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
+    auto it = g_phantom_shape_bindings.find(shape);
+    if (it == g_phantom_shape_bindings.end()) {
+        fprintf(stderr, "FATAL: Havok callback for unknown phantom shape %p\\n", shape);
+        std::abort();
+    }
+    auto callbacks = it->second;
+    if (remove) {
         g_phantom_shape_bindings.erase(it);
     }
-    // Forward to the managed delete handler (HkDeleteHandler: Instances.Remove).
-    if (binding.del) {
-        reinterpret_cast<phantom_delete_sysv_t>(binding.del)(shape);
-    }
-    // Reclaim the per-instance enter/leave bridge slots. The delete callback is
-    // never bridged (Havok holds this shared dispatcher), so it needs no release.
-    release_void_ptr_ptr(binding.enter);
-    release_void_ptr_ptr(binding.leave);
+    return callbacks;
 }
 
-static void register_phantom_callback_shape(void *shape, void *enter, void *leave, void *del)
+using phantom_handler_sysv_t = void (*)(void *, void *);
+using phantom_delete_sysv_t = void (*)(void *);
+
+static void WINAPI phantom_enter_bridge(void *shape, void *body)
+{
+    auto target = get_phantom_callbacks(shape, false).enter;
+    if (target) {
+        reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
+    }
+}
+
+static void WINAPI phantom_leave_bridge(void *shape, void *body)
+{
+    auto target = get_phantom_callbacks(shape, false).leave;
+    if (target) {
+        reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
+    }
+}
+
+static void WINAPI phantom_delete_bridge(void *shape)
+{
+    auto target = get_phantom_callbacks(shape, true).del;
+    if (target) {
+        reinterpret_cast<phantom_delete_sysv_t>(target)(shape);
+    }
+}
+
+static void register_phantom_callbacks(void *shape, void *enter, void *leave, void *del)
 {
     if (!shape) {
         return;
     }
     std::lock_guard<std::mutex> lock(g_phantom_shape_mutex);
-    g_phantom_shape_bindings[shape] = phantom_callback_shape_binding{enter, leave, del};
+    g_phantom_shape_bindings[shape] = {enter, leave, del};
 }
-
 '''
 
 STRUCTS = '''
@@ -474,297 +429,73 @@ void Init(const char* dllPath)
 }
 '''
 
-THUNK_CPP_PREAMBLE = '''#include <cstdint>
-#include <cstddef>
-#include <atomic>
-#include <cstdio>
-#include <cstdlib>
-#include <mutex>
-#include <unordered_map>
-#include <vector>
-
-#include "win_types.h"
-#include "HavokThunkRegistry.h"
-
-'''
-
-GENERATED_BANNER = '''// ============================================================================
-// GENERATED FILE -- do not edit by hand.
-// Regenerate with: python3 tools/generate_havok_wrapper.py
-//
-// Havok callback bridge pool. Each slot is a distinct compile-time thunk address
-// handed to Havok as a C callback; the per-family pool size is fixed per build
-// and cannot be grown at run time. If the pool is exhausted the bridge prints a
-// diagnostic and aborts -- raise this family's entry in CALLBACK_SLOTS in the
-// generator, regenerate, and rebuild.
-// ============================================================================
-'''
+def callback_specs(signatures):
+    specs = {}
+    for sig in signatures:
+        if sig['name'] == PHANTOM_CALLBACK_CREATE:
+            continue
+        mappings = {**STATIC_CALLBACKS.get(sig['name'], {}),
+                    **TRANSIENT_CALLBACKS.get(sig['name'], {})}
+        for cs_type, arg_name in sig['args']:
+            family = DELEGATE_FAMILIES.get(cs_type)
+            semantic = mappings.get(arg_name)
+            if family is None:
+                continue
+            if semantic is None:
+                raise ValueError(f'No fixed callback bridge for {sig["name"]}.{arg_name}')
+            previous = specs.setdefault(semantic, family)
+            if previous != family:
+                raise ValueError(f'Conflicting signatures for callback {semantic}')
+    return specs
 
 
-def thunk_file_name(name: str) -> str:
-    return f'HavokThunk_{name}.cpp'
-
-
-def emit_thunk_header(families):
+def emit_callback_helpers(specs):
     lines = [
-        '#pragma once',
-        '',
-        '#include <initializer_list>',
-        '',
-        'struct callback_owner_binding {',
-        '    void (*release_fn)(void *target_ptr);',
-        '    void *target_ptr;',
-        '};',
-        '',
-        'void register_callback_owner(void *owner, std::initializer_list<callback_owner_binding> bindings);',
-        'void release_callback_owner(void *owner);',
+        'static void *register_static_callback(const char *name, void *target,',
+        '                                      std::atomic_uintptr_t &slot, void *bridge)',
+        '{',
+        '    if (!target) {',
+        '        return nullptr;',
+        '    }',
+        '    uintptr_t target_bits = reinterpret_cast<uintptr_t>(target);',
+        '    uintptr_t expected = 0;',
+        '    if (!slot.compare_exchange_strong(expected, target_bits,',
+        '                                      std::memory_order_release,',
+        '                                      std::memory_order_acquire)',
+        '        && expected != target_bits) {',
+        '        fprintf(stderr, "FATAL: Havok static callback \'%s\' changed target "',
+        '                        "from %p to %p\\n", name,',
+        '                reinterpret_cast<void *>(expected), target);',
+        '        std::abort();',
+        '    }',
+        '    return bridge;',
+        '}',
         '',
     ]
-    for family_name in families:
-        lines.append(f'void *bridge_{family_name}(void *target_ptr);')
-        lines.append(f'void release_{family_name}(void *target_ptr);')
-    lines.append('')
+    transient_names = {name for mappings in TRANSIENT_CALLBACKS.values()
+                       for name in mappings.values()}
+    for name, family in sorted(specs.items()):
+        ret, params, args = FAMILY_SIGNATURES[family]
+        lines.extend([
+            f'using {name}_sysv_t = {ret} (*)({params});',
+            f'static std::atomic_uintptr_t g_{name}_target{{0}};',
+        ])
+        if name in transient_names:
+            lines.append(f'static std::mutex g_{name}_mutex;')
+        lines.extend([
+            f'static {ret} WINAPI {name}_bridge({params})',
+            '{',
+            f'    auto fn = reinterpret_cast<{name}_sysv_t>(',
+            f'        g_{name}_target.load(std::memory_order_acquire));',
+            '    if (!fn) {',
+            f'        fprintf(stderr, "FATAL: Havok static callback \'{name}\' has no target\\n");',
+            '        std::abort();',
+            '    }',
+        ])
+        call = f'fn({args})' if args else 'fn()'
+        lines.append(f'    {call};' if ret == 'void' else f'    return {call};')
+        lines.extend(['}', ''])
     return '\n'.join(lines)
-
-
-def emit_bridge_single(name: str, ret: str, params: str, args: str):
-    # A family that only ever sees a single distinct callback pointer gets a
-    # collapsed bridge: one thunk backed by one target, with no index map, free-list
-    # or thunk array. A second distinct *live* target aborts -- it would mean the
-    # family was mis-sized and should be given a multi-slot pool in CALLBACK_SLOTS.
-    sysv_type = f'{name}_sysv_t'
-    lines = [
-        GENERATED_BANNER + THUNK_CPP_PREAMBLE,
-        f'using {sysv_type} = {ret} (*)({params});',
-        f'static std::mutex {name}_mutex;',
-        '',
-        '// Single-slot family: one target read lock-free by the thunk (acquire) and',
-        '// published under the mutex (release). No collection -- just this pointer.',
-        f'static std::atomic_uintptr_t {name}_target = 0;',
-        f'static uint32_t {name}_refcount = 0;  // guarded by {name}_mutex',
-        '',
-        f'static {ret} WINAPI {name}_thunk({params})',
-        '{',
-        f'    auto fn = reinterpret_cast<{sysv_type}>({name}_target.load(std::memory_order_acquire));',
-    ]
-    if ret == 'void':
-        lines += [
-            '    if (!fn) {',
-            '        return;',
-            '    }',
-            f'    fn({args});' if args else '    fn();',
-        ]
-    else:
-        lines += [
-            '    if (!fn) {',
-            f'        return {ret}{{}};',
-            '    }',
-            f'    return fn({args});' if args else '    return fn();',
-        ]
-    lines += [
-        '}',
-        '',
-        f'void *bridge_{name}(void *target_ptr)',
-        '{',
-        '    if (!target_ptr) {',
-        '        return nullptr;',
-        '    }',
-        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    auto current = {name}_target.load(std::memory_order_acquire);',
-        '    if (current == 0) {',
-        f'        {name}_target.store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);',
-        f'        {name}_refcount = 1;',
-        f'    }} else if (current == reinterpret_cast<uintptr_t>(target_ptr)) {{',
-        f'        ++{name}_refcount;',
-        '    } else {',
-        '        fprintf(stderr,',
-        f'                "FATAL: Havok callback bridge single-slot family \'{name}\' received a\\n"',
-        '                "  second distinct target while the first was still live. It was sized for one\\n"',
-        '                "  callback pointer; give it a multi-slot pool in CALLBACK_SLOTS in\\n"',
-        '                "  tools/generate_havok_wrapper.py, regenerate, and rebuild.\\n");',
-        '        std::abort();',
-        '    }',
-        f'    return reinterpret_cast<void *>(&{name}_thunk);',
-        '}',
-        '',
-        f'void release_{name}(void *target_ptr)',
-        '{',
-        '    if (!target_ptr) {',
-        '        return;',
-        '    }',
-        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    if ({name}_target.load(std::memory_order_acquire) != reinterpret_cast<uintptr_t>(target_ptr)) {{',
-        '        return;',
-        '    }',
-        f'    if ({name}_refcount > 0 && --{name}_refcount == 0) {{',
-        f'        {name}_target.store(0, std::memory_order_release);',
-        '    }',
-        '}',
-        '',
-    ]
-    return lines
-
-
-def emit_thunk_table(name: str, ms_type: str, slots: int):
-    # The thunk table is conceptually one distinct template instantiation per
-    # slot:
-    #
-    #     static <ms_type> <name>_thunks[slots] = {
-    #         &<name>_thunk<0>, &<name>_thunk<1>, ... , &<name>_thunk<slots-1>,
-    #     };
-    #
-    # Emitted flat that is `slots` initializer lines -- 32768 for the big
-    # void_ptr_ptr family -- which dominates the file. Instead we build the exact
-    # same array with a ladder of doubling macros, so the table costs
-    # O(log2(slots)) source lines (one macro per power of two) at the price of
-    # macro nesting. HKTHUNK_1(n) is a single &<name>_thunk<n>; each
-    # HKTHUNK_2N(n) expands to two HKTHUNK_N blocks -- the lower half at offset n,
-    # the upper half at n+N -- so a single HKTHUNK_<pow>(offset) fans out to a
-    # whole power-of-two run of consecutive indices. A count that is not a power
-    # of two is assembled from its binary decomposition (e.g. 96 -> HKTHUNK_64(0),
-    # HKTHUNK_32(64)). The macros are #undef'd right after the table so they do
-    # not leak.
-    top = 1
-    while top * 2 <= slots:
-        top *= 2
-
-    lines = [
-        '// Thunk pointer table -- see emit_thunk_table() in the generator. This is the',
-        f'// power-of-two doubling-macro form of an explicit {slots}-entry initializer',
-        f'// list (&{name}_thunk<0> .. &{name}_thunk<{slots - 1}>), one instantiation per slot.',
-        f'#define HKTHUNK_1(n) &{name}_thunk<(n)>',
-    ]
-    power = 1
-    while power < top:
-        lines.append(
-            f'#define HKTHUNK_{power * 2}(n) HKTHUNK_{power}(n), HKTHUNK_{power}((n) + {power})'
-        )
-        power *= 2
-
-    blocks = []
-    offset = 0
-    power = top
-    remaining = slots
-    while power >= 1:
-        if remaining >= power:
-            blocks.append(f'HKTHUNK_{power}({offset})')
-            offset += power
-            remaining -= power
-        power //= 2
-
-    lines.append(f'static {ms_type} {name}_thunks[{slots}] = {{ {", ".join(blocks)} }};')
-
-    power = 1
-    lines.append('#undef HKTHUNK_1')
-    while power < top:
-        lines.append(f'#undef HKTHUNK_{power * 2}')
-        power *= 2
-    return lines
-
-
-def emit_bridge_family(name: str, ret: str, params: str, args: str):
-    slots = slots_for(name)
-    if slots == 1:
-        return emit_bridge_single(name, ret, params, args)
-    sysv_type = f'{name}_sysv_t'
-    ms_type = f'{name}_ms_t'
-    thunk_params = params
-    thunk_args = args
-    lines = [
-        GENERATED_BANNER + THUNK_CPP_PREAMBLE,
-        f'using {sysv_type} = {ret} (*)({params});',
-        f'using {ms_type} = {ret} (WINAPI *)({params});',
-        f'static std::mutex {name}_mutex;',
-        '',
-        '// Per-slot target read lock-free by the thunks (acquire) and published by',
-        '// bridge()/release() (release) under the mutex. Slot management (dedup +',
-        '// allocation) is O(1): an index map for dedup and a free-list stack for',
-        '// allocation, both touched only under the mutex, never by the thunks.',
-        f'static std::atomic_uintptr_t {name}_targets[{slots}] = {{}};',
-        f'struct {name}_slot {{ uint32_t index; uint32_t refs; }};',
-        f'static std::unordered_map<void *, {name}_slot> {name}_index;',
-        f'static std::vector<uint32_t> {name}_free_slots;',
-        f'static uint32_t {name}_high_water = 0;',
-        '',
-        'template <size_t Index>',
-        f'static {ret} WINAPI {name}_thunk({thunk_params})',
-        '{',
-        f'    auto fn_bits = {name}_targets[Index].load(std::memory_order_acquire);',
-        f'    auto fn = reinterpret_cast<{sysv_type}>(fn_bits);',
-    ]
-    if ret == 'void':
-        lines.extend([
-            '    if (!fn) {',
-            '        return;',
-            '    }',
-            f'    fn({thunk_args});' if thunk_args else '    fn();',
-        ])
-    else:
-        lines.extend([
-            '    if (!fn) {',
-            f'        return {ret}{{}};',
-            '    }',
-            f'    return fn({thunk_args});' if thunk_args else '    return fn();',
-        ])
-    lines.extend([
-        '}',
-        '',
-    ])
-    lines.extend(emit_thunk_table(name, ms_type, slots))
-    lines.extend([
-        '',
-        f'void *bridge_{name}(void *target_ptr)',
-        '{',
-        '    if (!target_ptr) {',
-        '        return nullptr;',
-        '    }',
-        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    auto existing = {name}_index.find(target_ptr);',
-        f'    if (existing != {name}_index.end()) {{',
-        '        ++existing->second.refs;',
-        f'        return reinterpret_cast<void *>({name}_thunks[existing->second.index]);',
-        '    }',
-        '    uint32_t index;',
-        f'    if (!{name}_free_slots.empty()) {{',
-        f'        index = {name}_free_slots.back();',
-        f'        {name}_free_slots.pop_back();',
-        f'    }} else if ({name}_high_water < {slots}) {{',
-        f'        index = {name}_high_water++;',
-        '    } else {',
-        '        fprintf(stderr,',
-        f'                "FATAL: Havok callback bridge pool exhausted for the \'{name}\' signature family:\\n"',
-        f'                "  All {slots} bridge slots are in use. Every distinct live native callback of this\\n"',
-        '                "  signature consumes one slot; phantom/trigger volumes and other per-block callbacks\\n"',
-        '                "  in worlds with very many grids/blocks can register more than the pool can hold.\\n"',
-        f'                "  Fix: raise this family in CALLBACK_SLOTS (currently {slots}) in tools/generate_havok_wrapper.py,\\n"',
-        '                "  regenerate the thunks (python3 tools/generate_havok_wrapper.py), and rebuild.\\n");',
-        '        std::abort();',
-        '    }',
-        f'    {name}_targets[index].store(reinterpret_cast<uintptr_t>(target_ptr), std::memory_order_release);',
-        f'    {name}_index.emplace(target_ptr, {name}_slot{{index, 1}});',
-        f'    return reinterpret_cast<void *>({name}_thunks[index]);',
-        '}',
-        '',
-        f'void release_{name}(void *target_ptr)',
-        '{',
-        '    if (!target_ptr) {',
-        '        return;',
-        '    }',
-        f'    std::lock_guard<std::mutex> lock({name}_mutex);',
-        f'    auto it = {name}_index.find(target_ptr);',
-        f'    if (it == {name}_index.end()) {{',
-        '        return;',
-        '    }',
-        '    if (--it->second.refs == 0) {',
-        '        uint32_t index = it->second.index;',
-        f'        {name}_targets[index].store(0, std::memory_order_release);',
-        f'        {name}_free_slots.push_back(index);',
-        f'        {name}_index.erase(it);',
-        '    }',
-        '}',
-        '',
-    ])
-    return lines
 
 
 def split_args(arg_string: str):
@@ -819,11 +550,17 @@ def map_return_type(cs_type: str) -> str:
     return map_value_type(cs_type)
 
 
-def map_call_arg(cs_type: str, name: str) -> str:
-    family = DELEGATE_FAMILIES.get(cs_type)
-    if family is None:
+def map_call_arg(function: str, cs_type: str, name: str) -> str:
+    if cs_type not in ALL_DELEGATE_TYPES:
         return name
-    return f'bridge_{family}({name})'
+    semantic = STATIC_CALLBACKS.get(function, {}).get(name)
+    if semantic:
+        return (f'register_static_callback("{semantic}", {name}, '
+                f'g_{semantic}_target, reinterpret_cast<void *>(&{semantic}_bridge))')
+    semantic = TRANSIENT_CALLBACKS.get(function, {}).get(name)
+    if semantic:
+        return f'{name} ? reinterpret_cast<void *>(&{semantic}_bridge) : nullptr'
+    raise ValueError(f'No fixed callback bridge for {function}.{name}')
 
 
 def load_signatures():
@@ -849,11 +586,10 @@ def load_signatures():
                 i += 1
 
             signature = ' '.join(signature_lines)
-            match = re.search(r'internal\s+(?:unsafe\s+)?static\s+extern\s+([^\s]+(?:\.[^\s]+)?)\s+(\w+)\((.*)\);', signature)
+            match = PINVOKE_SIGNATURE.search(signature)
             if match is None:
-                # Skip DllImports that are not `internal ... static extern`. The only
-                # such case is HavokLinux.Init (the Linux entry point), which is
-                # provided by hand in FOOTER rather than generated as a wrapper.
+                # HavokLinux.Init is provided by hand in FOOTER rather than
+                # generated as a wrapper.
                 i += 1
                 continue
 
@@ -875,36 +611,31 @@ def load_signatures():
 def emit_wrapper(sig):
     ret = map_return_type(sig['ret'])
     params = ', '.join(f'{map_param_type(t)} {n}' for t, n in sig['args']) or 'void'
-    arg_names = ', '.join(map_call_arg(t, n) for t, n in sig['args'])
     name = sig['name']
+    arg_names = '' if name == PHANTOM_CALLBACK_CREATE else ', '.join(
+        map_call_arg(name, t, n) for t, n in sig['args'])
     lines = [f'{ret} {name}({params}) {{ EnsureThreadInfo();']
     lines.append(f'    LOG_CALL({name});')
     lines.append(f'    REQUIRE_FUNCTION_POINTER({name})')
-    if name in PHANTOM_SHAPE_CREATE_FUNCS:
-        enter, leave, delete = (a[1] for a in sig['args'])
-        lines.append(f'    void *enterThunk = bridge_void_ptr_ptr({enter});')
-        lines.append(f'    void *leaveThunk = bridge_void_ptr_ptr({leave});')
-        lines.append(f'    auto result = p{name}(enterThunk, leaveThunk, reinterpret_cast<void *>(&phantom_delete_dispatch));')
-        lines.append(f'    register_phantom_callback_shape(result, {enter}, {leave}, {delete});')
+    if name == PHANTOM_CALLBACK_CREATE:
+        enter, leave, delete = (arg_name for _, arg_name in sig['args'])
+        lines.append(
+            f'    auto result = p{name}('
+            f'{enter} ? reinterpret_cast<void *>(&phantom_enter_bridge) : nullptr, '
+            f'{leave} ? reinterpret_cast<void *>(&phantom_leave_bridge) : nullptr, '
+            f'{delete} ? reinterpret_cast<void *>(&phantom_delete_bridge) : nullptr);')
+        lines.append(f'    register_phantom_callbacks(result, {enter}, {leave}, {delete});')
         lines.append('    return result;')
-    elif name in OWNER_CALLBACKS:
-        lines.append(f'    auto result = p{name}({arg_names});')
-        bindings = ', '.join(f'callback_owner_binding{{&release_{family}, {arg}}}' for family, arg in OWNER_CALLBACKS[name])
-        lines.append(f'    register_callback_owner(result, {{{bindings}}});')
-        lines.append('    return result;')
-    elif name in OWNER_RELEASE_FUNCS:
-        release_target = sig['args'][0][1] if sig['args'] else 'nullptr'
-        lines.append(f'    p{name}({arg_names});')
-        lines.append(f'    release_callback_owner({release_target});')
-    elif name in SYNC_RELEASE_ARGS:
-        arg_family = {n: DELEGATE_FAMILIES.get(t) for t, n in sig['args']}
-        releases = [f'    release_{arg_family[a]}({a});' for a in SYNC_RELEASE_ARGS[name]]
+    elif name in TRANSIENT_CALLBACKS:
+        callback_arg, semantic = next(iter(TRANSIENT_CALLBACKS[name].items()))
+        lines.append(f'    std::lock_guard<std::mutex> lock(g_{semantic}_mutex);')
+        lines.append(f'    g_{semantic}_target.store(reinterpret_cast<uintptr_t>({callback_arg}), std::memory_order_release);')
         if ret == 'void':
             lines.append(f'    p{name}({arg_names});')
-            lines.extend(releases)
         else:
             lines.append(f'    auto result = p{name}({arg_names});')
-            lines.extend(releases)
+        lines.append(f'    g_{semantic}_target.store(0, std::memory_order_release);')
+        if ret != 'void':
             lines.append('    return result;')
     elif ret == 'void':
         lines.append(f'    p{name}({arg_names});')
@@ -917,15 +648,12 @@ def emit_wrapper(sig):
 
 def main():
     signatures = load_signatures()
-    family_names = sorted(FAMILY_SIGNATURES)
-    for path in THUNK_DIR.glob('HavokThunk_*.cpp'):
+    specs = callback_specs(signatures)
+    for path in SRC_DIR.glob('HavokThunk_*.cpp'):
         path.unlink()
-    THUNK_HEADER.write_text(emit_thunk_header(family_names))
-    for family_name in family_names:
-        ret, params, args = FAMILY_SIGNATURES[family_name]
-        (THUNK_DIR / thunk_file_name(family_name)).write_text('\n'.join(emit_bridge_family(family_name, ret, params, args)))
+    (SRC_DIR / 'HavokThunkRegistry.h').unlink(missing_ok=True)
 
-    lines = [PREAMBLE, OWNER_HELPERS, STRUCTS]
+    lines = [PREAMBLE, emit_callback_helpers(specs), PHANTOM_CALLBACK_HELPERS, STRUCTS]
     for sig in signatures:
         ret = map_return_type(sig['ret'])
         params = ', '.join(f'{map_param_type(t)} {n}' for t, n in sig['args']) or 'void'
@@ -944,10 +672,7 @@ def main():
     lines.append('} // extern "C"')
     OUTPUT.write_text('\n'.join(lines))
 
-    total = sum(slots_for(f) for f in family_names)
-    print(f'Generated Havok.cpp and {len(family_names)} thunk families ({total} slots total):')
-    for f in family_names:
-        print(f'  {f}: {slots_for(f)}')
+    print(f'Generated Havok.cpp with {len(specs) + 3} fixed callback bridges')
 
 
 if __name__ == '__main__':
