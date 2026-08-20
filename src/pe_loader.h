@@ -421,6 +421,7 @@ struct pe_image {
     const char *name;
     DllEntry_t entry;
     void *image;
+    void *sidecar_handle;
     size_t size;
     int type;
 
@@ -439,7 +440,7 @@ struct pe_image {
 // PE loader API
 // ---------------------------------------------------------------------------
 
-bool pe_load_library(const char *filename, void **image, size_t *size);
+bool pe_load_library(const char *filename, const char *sidecar_path, struct pe_image *image);
 int  link_pe_images(struct pe_image *pe_image, unsigned short n);
 bool pe_unload_library(struct pe_image &pe);
 

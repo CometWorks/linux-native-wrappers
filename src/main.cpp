@@ -33,8 +33,8 @@ typedef WINAPI size_t (*RecastDetour_GetAllocatedMemory_t)(void);
 
 int main(int argc, char *argv[]) {
     // Load the DLL
-    pe_image image;
-    if (!load_dll(&image, "../RecastDetour.dll")) {
+    pe_image image{};
+    if (!load_dll(&image, "../RecastDetour.dll", nullptr)) {
         LogMessage("Failed to load RecastDetour.dll");
         return 2;
     }

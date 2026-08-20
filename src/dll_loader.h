@@ -7,6 +7,6 @@
 
 #include "pe_loader.h"
 
-bool load_dll(pe_image *image, const char *name);
+bool load_dll(pe_image *image, const char *name, const char *sidecar_path);
 
 #endif // DLL_LOADER_H

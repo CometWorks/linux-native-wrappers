@@ -14,15 +14,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <fcntl.h>
+#include <link.h>
 #include <mutex>
 #include <pthread.h>
+#include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
 
 #include "pe_loader.h"
+#include "pe_sidecar.h"
 #include "support.h"
 
 // ---------------------------------------------------------------------------
@@ -481,6 +486,9 @@ static int fixup_reloc(void *image, IMAGE_NT_HEADERS *nt_hdr)
 
 static int fix_pe_image(pe_image *pe)
 {
+    if (pe->sidecar_handle)
+        return 0;
+
     if (pe->size == pe->opt_hdr->SizeOfImage)
         return 0;
 
@@ -623,11 +631,115 @@ int link_pe_images(pe_image *pe_image, unsigned short n)
 // Library loading / unloading
 // ---------------------------------------------------------------------------
 
-bool pe_load_library(const char *filename, void **image, size_t *size)
+static bool sidecar_matches_pe(void *handle, const char *filename)
 {
-    *image = MAP_FAILED;
-    *size = 0;
+    auto *version = static_cast<const uint64_t *>(dlsym(handle, "__lnw_sidecar_version"));
+    auto *expected_size = static_cast<const uint64_t *>(dlsym(handle, "__lnw_pe_source_size"));
+    auto *expected_fingerprint = static_cast<const uint64_t *>(
+        dlsym(handle, "__lnw_pe_source_fingerprint"));
+    if (!version || *version != PE_SIDECAR_VERSION || !expected_size || !expected_fingerprint)
+        return false;
 
+    int fd = open(filename, O_RDONLY);
+    if (fd < 0)
+        return false;
+    struct stat st;
+    if (fstat(fd, &st) < 0 || static_cast<uint64_t>(st.st_size) != *expected_size) {
+        close(fd);
+        return false;
+    }
+
+    uint64_t fingerprint = 0xcbf29ce484222325ULL;
+    unsigned char buffer[65536];
+    ssize_t count;
+    while ((count = read(fd, buffer, sizeof(buffer))) > 0)
+        for (ssize_t i = 0; i < count; ++i)
+            fingerprint = (fingerprint ^ buffer[i]) * 0x100000001b3ULL;
+    close(fd);
+    return count == 0 && fingerprint == *expected_fingerprint;
+}
+
+static bool generate_sidecar(const char *filename, const std::string &sidecar)
+{
+    std::string temporary = sidecar + ".tmp.XXXXXX";
+    std::vector<char> path(temporary.begin(), temporary.end());
+    path.push_back(0);
+    int fd = mkstemp(path.data());
+    std::string error;
+    if (fd < 0)
+        error = std::string("cannot create sidecar: ") + strerror(errno);
+    else if (fchmod(fd, 0644) < 0)
+        error = std::string("cannot set sidecar permissions: ") + strerror(errno);
+    bool generated = fd >= 0 && error.empty() && generate_pe_sidecar(filename, fd, &error);
+    if (generated && fsync(fd) < 0) {
+        generated = false;
+        error = std::string("cannot sync sidecar: ") + strerror(errno);
+    }
+    if (fd >= 0 && close(fd) < 0 && generated) {
+        generated = false;
+        error = std::string("cannot close sidecar: ") + strerror(errno);
+    }
+    if (generated && rename(path.data(), sidecar.c_str()) == 0)
+        return true;
+    if (generated)
+        error = std::string("cannot publish sidecar: ") + strerror(errno);
+    if (fd >= 0)
+        unlink(path.data());
+    LogMessageA("Failed to generate PE sidecar for %s: %s", filename, error.c_str());
+    return false;
+}
+
+static bool load_sidecar(const char *path, const char *filename, pe_image *pe)
+{
+    void *handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (!handle) {
+        LogMessageA("Failed to load PE sidecar %s: %s", path, dlerror());
+        return false;
+    }
+
+    if (!sidecar_matches_pe(handle, filename)) {
+        LogMessageA("PE sidecar does not match %s: %s", filename, path);
+        dlclose(handle);
+        return false;
+    }
+
+    link_map *mapping = nullptr;
+    auto *end = static_cast<unsigned char *>(dlsym(handle, "__lnw_pe_image_end"));
+    if (dlinfo(handle, RTLD_DI_LINKMAP, &mapping) != 0 || !mapping || !end) {
+        LogMessageA("Invalid PE sidecar %s", path);
+        dlclose(handle);
+        return false;
+    }
+    auto *start = reinterpret_cast<unsigned char *>(mapping->l_addr);
+    if (end <= start) {
+        LogMessageA("Invalid PE sidecar %s", path);
+        dlclose(handle);
+        return false;
+    }
+
+    if (mprotect(start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        LogMessageA("Failed to make PE sidecar writable %s: %s", path, strerror(errno));
+        dlclose(handle);
+        return false;
+    }
+
+    pe->image = start;
+    pe->size = static_cast<size_t>(end - start);
+    pe->sidecar_handle = handle;
+
+    if (!setup_nt_threadinfo(nullptr) || !setup_kuser_shared_data()) {
+        dlclose(handle);
+        pe->image = nullptr;
+        pe->sidecar_handle = nullptr;
+        pe->size = 0;
+        return false;
+    }
+
+    return true;
+}
+
+static bool load_raw_pe(const char *filename, pe_image *pe)
+{
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
         LogMessageA("Failed to open PE library: %s", filename);
@@ -641,25 +753,51 @@ bool pe_load_library(const char *filename, void **image, size_t *size)
         return false;
     }
 
-    *size = st.st_size;
-    *image = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
+    pe->size = st.st_size;
+    pe->image = mmap(nullptr, pe->size, PROT_READ, MAP_SHARED, fd, 0);
     close(fd);
-
-    if (*image == MAP_FAILED) {
+    if (pe->image == MAP_FAILED) {
         LogMessageA("Failed to mmap PE library: %s", filename);
+        pe->image = nullptr;
         return false;
     }
 
-    setup_nt_threadinfo(nullptr);
-    setup_kuser_shared_data();
+    if (setup_nt_threadinfo(nullptr) && setup_kuser_shared_data())
+        return true;
+    munmap(pe->image, pe->size);
+    pe->image = nullptr;
+    pe->size = 0;
+    return false;
+}
 
-    return true;
+bool pe_load_library(const char *filename, const char *sidecar_path, pe_image *pe)
+{
+    pe->image = nullptr;
+    pe->sidecar_handle = nullptr;
+    pe->size = 0;
+
+    // The caller provides the complete path in a dedicated cache directory.
+    // A DLL basename keeps stack traces readable without exposing this ELF to
+    // the .NET runtime's normal DllImport search directories.
+    if (sidecar_path && *sidecar_path) {
+        if (access(sidecar_path, R_OK) == 0 &&
+            load_sidecar(sidecar_path, filename, pe))
+            return true;
+
+        if (generate_sidecar(filename, sidecar_path) && load_sidecar(sidecar_path, filename, pe))
+            return true;
+    }
+
+    return load_raw_pe(filename, pe);
 }
 
 bool pe_unload_library(pe_image &pe)
 {
     num_pe_exports = 0;
-    munmap(pe.image, pe.size);
+    if (pe.sidecar_handle)
+        dlclose(pe.sidecar_handle);
+    else
+        munmap(pe.image, pe.size);
     return true;
 }
 

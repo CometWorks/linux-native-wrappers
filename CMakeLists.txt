@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SOURCES
         src/support.cpp
         src/pe_loader.cpp
+        src/pe_sidecar.cpp
         src/winlibs.cpp
         src/cpu_features.cpp
         src/dll_loader.cpp
@@ -74,11 +75,11 @@ set_target_properties(D3DCompiler PROPERTIES
 )
 
 # Link libraries (if any)
-target_link_libraries(${PROJECT_NAME} PRIVATE c)
-target_link_libraries(RecastDetour PRIVATE c)
-target_link_libraries(Havok PRIVATE c)
-target_link_libraries(VRageNative PRIVATE c)
-target_link_libraries(D3DCompiler PRIVATE c)
+target_link_libraries(${PROJECT_NAME} PRIVATE c ${CMAKE_DL_LIBS})
+target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
+target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
+target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
+target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
 
 # Compiler flags
 #-Werror -Wextra
@@ -87,6 +88,13 @@ target_compile_options(RecastDetour PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(Havok PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
+
+add_executable(generate_pe_sidecar
+        src/pe_sidecar.cpp
+        tools/generate_pe_sidecar.cpp)
+target_compile_options(generate_pe_sidecar PRIVATE -Wall)
+
+set(NATIVE_DLL_DIR "" CACHE PATH "Directory containing the Windows native DLLs")
 
 include(CTest)
 if(BUILD_TESTING)
@@ -103,10 +111,23 @@ if(BUILD_TESTING)
             tests/thread_id_dll_attach.cpp
     )
     target_compile_definitions(thread_id_dll_attach_test PRIVATE NATIVE_WRAPPERS_TESTING)
-    target_link_libraries(thread_id_dll_attach_test PRIVATE c)
+    target_link_libraries(thread_id_dll_attach_test PRIVATE c ${CMAKE_DL_LIBS})
     target_compile_options(thread_id_dll_attach_test PRIVATE -Wall -fpermissive)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
+
+    if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/Havok.dll")
+        add_test(NAME pe_sidecar_generation
+                COMMAND generate_pe_sidecar
+                        "${NATIVE_DLL_DIR}/Havok.dll"
+                        "${CMAKE_BINARY_DIR}/generated-Havok.dll")
+        add_executable(havok_crash_test tests/havok_crash.cpp)
+        target_link_libraries(havok_crash_test PRIVATE Havok)
+        add_test(NAME havok_unwind
+                COMMAND havok_crash_test "${NATIVE_DLL_DIR}/Havok.dll" --trace)
+        set_tests_properties(havok_unwind PROPERTIES
+                PASS_REGULAR_EXPRESSION "HkShape_CastRayCollectSingleHit")
+    endif()
 endif()
 
 # Install target (optional)

@@ -404,9 +404,9 @@ struct HkStaticCompoundShape_DecomposeShapeKeyResult {
 INIT_PREFIX = '''
 static pe_image g_havok_image;
 
-static void InitImpl(const char* dllPath)
+static void InitImpl(const char* dllPath, const char* sidecarPath)
 {
-    if (!load_dll(&g_havok_image, dllPath)) {
+    if (!load_dll(&g_havok_image, dllPath, sidecarPath)) {
         LogMessage("Failed to load Havok.dll");
         throw std::runtime_error("Failed to load Havok.dll");
     }
@@ -416,7 +416,7 @@ FOOTER = '''}
 
 extern "C" {
 
-void Init(const char* dllPath)
+void Init(const char* dllPath, const char* sidecarPath)
 {
     if (g_havok_image.image) {
         fprintf(stderr,
@@ -425,7 +425,7 @@ void Init(const char* dllPath)
                 g_havok_image.image, dllPath ? dllPath : "<null>");
         return;
     }
-    InitImpl(dllPath);
+    InitImpl(dllPath, sidecarPath);
 }
 '''
 
