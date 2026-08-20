@@ -123,6 +123,34 @@ ls build/*.so # libHavok.so libRecastDetour.so libVRageNative.so libD3DCompiler.
 make clean    # wipe the build/ directory
 ```
 
+The wrappers generate sidecars such as `Havok.dll` at caller-provided cache
+paths on first load. This makes PE frames, symbols, and unwind metadata
+available to Linux crash tools after the process exits.
+
+For saved cores or other tools that need to reopen the ELF after the process
+exits, generate a persistent copy explicitly:
+
+```bash
+build/generate_pe_sidecar /path/to/Havok.dll /cache/Havok.dll
+```
+
+The loader validates the sidecar's embedded source size and full-file FNV-1a
+fingerprint on every load. A changed DLL makes the old sidecar invalid, so it
+is atomically replaced before loading. If the DLL directory is read-only, the
+loader falls back to the raw PE loader.
+
+To enable the Havok integration tests, point CMake at the game's native DLL
+directory. `havok_crash_test` provides both a self-checking unwind trace and an
+unhandled crash for GDB/core testing:
+
+```bash
+cmake -S . -B build -DNATIVE_DLL_DIR=/path/to/SpaceEngineers/Bin64
+cmake --build build
+ctest --test-dir build --output-on-failure
+build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll --trace
+gdb --args build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll
+```
+
 ## Releases
 
 CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on

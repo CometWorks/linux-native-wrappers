@@ -20,7 +20,7 @@ static EXCEPTION_DISPOSITION ExceptionHandler(
     abort();
 }
 
-bool load_dll(pe_image *image, const char *name)
+bool load_dll(pe_image *image, const char *name, const char *sidecar_path)
 {
     if (!parseCPUInfo()) {
         LogMessage("Cannot parse CPU info");
@@ -30,15 +30,17 @@ bool load_dll(pe_image *image, const char *name)
     register_windows_library_functions();
 
     image->name = name;
-    if (!pe_load_library(image->name, &image->image, &image->size)) {
+    if (!pe_load_library(image->name, sidecar_path, image)) {
         LogMessageA("Missing DLL: %s", image->name);
         return false;
     }
 
-    link_pe_images(image, 1);
-    setup_nt_threadinfo(&ExceptionHandler);
-    pe_initialize_tls_for_current_thread(image, DLL_PROCESS_ATTACH);
+    if (link_pe_images(image, 1) ||
+        !setup_nt_threadinfo(&ExceptionHandler) ||
+        !pe_initialize_tls_for_current_thread(image, DLL_PROCESS_ATTACH))
+        return false;
 
     // 0x0d110001 is a sentinel fake HINSTANCE
-    return image->entry((PVOID)0x0d110001, DLL_PROCESS_ATTACH, nullptr);
+    bool loaded = !image->entry || image->entry((PVOID)0x0d110001, DLL_PROCESS_ATTACH, nullptr);
+    return loaded;
 }

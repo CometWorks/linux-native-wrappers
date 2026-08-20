@@ -315,9 +315,9 @@ DECLARE_FUNCTION_POINTER(VrVoxelMesh_Clear)
 // Initialization
 // ============================================================================
 
-static void InitImpl(const char* dllPath)
+static void InitImpl(const char* dllPath, const char* sidecarPath)
 {
-    if (!load_dll(&g_vrage_native_image, dllPath)) {
+    if (!load_dll(&g_vrage_native_image, dllPath, sidecarPath)) {
         LogMessage("Failed to load VRage.Native.dll");
         throw std::runtime_error("Failed to load VRage.Native.dll");
     }
@@ -412,7 +412,7 @@ static void InitImpl(const char* dllPath)
 
 extern "C" {
 
-void Init(const char* dllPath)
+void Init(const char* dllPath, const char* sidecarPath)
 {
     if (g_vrage_native_image.image) {
         fprintf(stderr,
@@ -421,7 +421,7 @@ void Init(const char* dllPath)
                 g_vrage_native_image.image, dllPath ? dllPath : "<null>");
         return;
     }
-    InitImpl(dllPath);
+    InitImpl(dllPath, sidecarPath);
 }
 
 // --- IsoMesher ---

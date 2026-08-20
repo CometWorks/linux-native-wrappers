@@ -81,7 +81,7 @@ DECLARE_FUNCTION_POINTER(RecastDetour_GetAllocatedMemory)
 
 extern "C" {
 
-void Init(const char* dllPath)
+void Init(const char* dllPath, const char* sidecarPath)
 {
     if (g_recast_image.image) {
         fprintf(stderr,
@@ -91,7 +91,7 @@ void Init(const char* dllPath)
         return;
     }
 
-    if (!load_dll(&g_recast_image, dllPath)) {
+    if (!load_dll(&g_recast_image, dllPath, sidecarPath)) {
         LogMessage("Failed to load RecastDetour.dll");
         throw std::runtime_error("Failed to load RecastDetour.dll");
     }

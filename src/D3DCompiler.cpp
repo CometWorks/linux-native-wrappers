@@ -47,7 +47,7 @@ static inline void* vtable_slot(void *obj, int index)
 
 extern "C" {
 
-void Init(const char* dllPath)
+void Init(const char* dllPath, const char* sidecarPath)
 {
     if (g_d3dcompiler_image.image) {
         fprintf(stderr,
@@ -57,7 +57,7 @@ void Init(const char* dllPath)
         return;
     }
 
-    if (!load_dll(&g_d3dcompiler_image, dllPath)) {
+    if (!load_dll(&g_d3dcompiler_image, dllPath, sidecarPath)) {
         fprintf(stderr, "D3DCompiler: Failed to load %s\n", dllPath);
         throw std::runtime_error("Failed to load d3dcompiler_47.dll");
     }
