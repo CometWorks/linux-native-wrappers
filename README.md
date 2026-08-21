@@ -7,7 +7,7 @@ These are thin C++17 shims built around a custom PE (Portable Executable)
 loader. They load the original, unmodified Windows native DLLs shipped with the
 game and thunk calls across the ABI boundary so the game runs on Linux.
 
-The wrappers do **not** reimplement any of the underlying libraries.
+Most wrappers do **not** reimplement any of the underlying libraries.
 Implementations of the Win32 API calls used by the native libraries
 are provided based on Linux primitives, including optional ntsync support.
 
@@ -19,6 +19,7 @@ are provided based on Linux primitives, including optional ntsync support.
 | `libRecastDetour.so` | `RecastDetour.dll` (navmesh) |
 | `libVRageNative.so`  | `VRage.Native.dll` (voxels) |
 | `libD3DCompiler.so`  | `d3dcompiler_47.dll` (shader compiler) |
+| `libVRage.KytheraV2.Native.so` | `VRage.KytheraV2.Native.dll` compatibility shim |
 
 ## Havok callback bridge thunks
 
@@ -119,7 +120,7 @@ Requirements: `cmake` (>= 3.10), `make`, `g++` (C++17).
 
 ```bash
 make          # cmake --preset default + cmake --build --preset default
-ls build/*.so # libHavok.so libRecastDetour.so libVRageNative.so libD3DCompiler.so
+ls build/*.so
 make clean    # wipe the build/ directory
 ```
 
@@ -154,7 +155,7 @@ gdb --args build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll
 ## Releases
 
 CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on
-every push and publishes the four libraries in two configurations, as two
+every push and publishes the libraries in two configurations, as two
 separate assets on the same release:
 
 | Asset                                | Configuration        |
@@ -169,7 +170,7 @@ separate assets on the same release:
 
 The build process of Pulsar for Linux and Magnetar download the
 `linux-native-wrappers.tar.gz` (Release) asset from the latest release;
-each archive contains the four `.so` files at its root. The `.debug` variant
+each archive contains the `.so` files at its root. The `.debug` variant
 carries unoptimized, symbol-rich builds for debugging.
 
 ## License

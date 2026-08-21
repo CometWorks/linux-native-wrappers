@@ -56,9 +56,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          # Pulsar for Linux needs all four wrappers (Magnetar uses only three).
-          libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so"
-          # Build each configuration into its own tree and archive the four
+          # Build and package every wrapper.
+          libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so libVRage.KytheraV2.Native.so"
+          # Build each configuration into its own tree and archive the
           # .so files at the root of a tarball. Release keeps the historical
           # asset name; Debug gets the `.debug` variant name.
           build_config() {
