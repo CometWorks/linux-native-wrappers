@@ -177,11 +177,13 @@ include(CTest)
 if(BUILD_TESTING)
     find_program(PYTHON3_EXECUTABLE python3)
     if(NOT PYTHON3_EXECUTABLE)
-        message(FATAL_ERROR "python3 is required for the Havok generator test")
+        message(FATAL_ERROR "python3 is required for generator tests")
     endif()
 
-    add_test(NAME havok_generator
-            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/havok_generator.py)
+    add_test(NAME se1_generators
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se1_generators.py)
+    add_test(NAME se2_generators
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se2_generators.py)
 
     add_executable(thread_id_dll_attach_test
             ${SOURCES}

@@ -1,36 +1,23 @@
 #!/usr/bin/env python3
-"""Generate the capture-scoped VRage.Physics.Native forwarding wrapper."""
+"""Generate VRage.Physics.Native forwarders from decompiled P/Invokes."""
 
-import json
 import re
 from collections import Counter
 from pathlib import Path
 
+from csharp_pinvoke import (
+    CPP_TYPES, cpp_identifier, load_generator_declarations, normalize_type, parameter_names,
+)
+
 
 ROOT = Path(__file__).parent.parent
-CAPTURES = Path.home() / "Documents/se2-native-wrappers/Playback/TestData"
 OUTPUT = ROOT / "src/Physics.cpp"
 MANIFEST = ROOT / "src/Physics.exports"
 
-TYPE_MAP = {
-    "void": "void",
-    "ptr": "void *",
-    "fnptr": "void *",
-    "str": "const char *",
-    "i1": "int8_t",
-    "u1": "uint8_t",
-    "i4": "int32_t",
-    "u4": "uint32_t",
-    "u8": "uint64_t",
-    "r4": "float",
-    "bool1": "uint8_t",
-    "bool4": "int32_t",
-}
 STRUCT_TYPES = {1: "uint8_t", 2: "uint16_t", 4: "uint32_t", 8: "uint64_t"}
 
 SET_EXPAND = "?SetExpandStub@HkBuffer@@SAXP6APEAXP6APEAXPEAU1@PEAXH@Z01H@Z@Z"
 HK_INIT = "?HkInit@HkMainSystem@@SAXAEBUHkMainCinfo@1@@Z"
-HK_QUIT = "?HkQuit@HkMainSystem@@SAXXZ"
 SET_DELETION = "?SetColliderDeletionCallback@@YAXP6AXPEBVhknpShape@@@Z@Z"
 CREATE_DEBUG_DRAW = "?CreateDebugDrawSystem@HkSession@@QEAAPEAVHkDebugProcessManager@@AEBUDebugDrawImplementationTable@@PEAX@Z"
 CREATE_CHARACTER = "?Create@HkCharacterController@@SAPEAV1@AEBUHkCharacterControllerCinfo@@@Z"
@@ -40,239 +27,102 @@ ALLOCATE_WORLD = "?AllocateWorld@HkSession@@QEAAAEAVhknpWorld@@_NAEBVhkVector4d@
 RELEASE_WORLD = "?ReleaseWorld@HkSession@@QEAAXAEAVhknpWorld@@@Z"
 SUBSCRIBE_MUTATION = "?SubscribeToMutation@@YAXPEBVhknpShape@@PEAX@Z"
 UNSUBSCRIBE_MUTATION = "?UnsubscribeFromMutation@@YAXPEBVhknpShape@@PEAX@Z"
-TOGGLE_GRAVITY = "?ToggleGravity@HkRagdoll@@QEBAX_N@Z"
-REMOVE_RAGDOLL_FROM_WORLD = "?RemoveFromWorld@HkRagdoll@@QEAAXW4ActivationMode@hknpWorldWriter@@@Z"
-SET_RAGDOLL_ENTITY_LAYER = "?SetEntityLayerIndex@HkRagdoll@@QEAAXH@Z"
-GET_RAGDOLL_ROOT_TRANSFORM = "?GetRootBodyTransform@HkRagdoll@@QEBA?AUHkPackedWorldTransform@@XZ"
 SET_CHARACTER_BODY_INFO = "?SetBodyInfo@HkCharacterController@@QEAAXAEBUBodyInfoPackf@@M_N@Z"
-REMOVE_BODIES = "?removeBodies@hknpWorld@@UEAAXPEBUhknpBodyId@@HW4ActivationMode@hknpWorldWriter@@@Z"
-DESTROY_BODIES = "?destroyBodies@hknpWorld@@UEAAXPEBUhknpBodyId@@HW4ActivationMode@hknpWorldWriter@@@Z"
-GET_BODY_CONSTRAINT_IDS = "?GetBodyConstraintIds@HkConstraintHandler@@QEAAXAEAVhknpWorld@@UhknpBodyId@@AEAU?$HkBufferReference@UhknpConstraintId@@@@@Z"
-DESTROY_BODY_CONSTRAINTS = "?DestroyBodyConstraints@HkConstraintHandler@@QEAAXAEAVhknpWorld@@UhknpBodyId@@@Z"
-GET_CHILD = "?GetChild@@YA_NPEBVhknpShape@@IPEAPEBV1@@Z"
-GET_SHAPE_CHUNK = "?GetShapeChunk@HkSimdTreeGridShape@@QEBA?AUVector3I@@I@Z"
-CLONE_SHAPE_SHALLOW = "?cloneShapeShallow@HkBreakableCompoundShapeManipulator@@SAPEAXPEBX@Z"
-DISJOINT_EDGE = "?disjointEdge@HkBreakableCompoundShapeManipulator@@SAXPEAXH@Z"
-DISJOINT_NODE_EDGES = "?disjointNodeEdges@HkBreakableCompoundShapeManipulator@@SAXPEAXU?$hkHandle@I$0PPPPPPPP@UhknpShapeInstanceIdDiscriminant@@@@@Z"
-DISJOINT_SETS = "?disjointSets@HkBreakableCompoundShapeManipulator@@SAPEAXPEAX@Z"
-DISPOSE_SETS = "?disposeSets@HkBreakableCompoundShapeManipulator@@SAXPEAX@Z"
-REBUILD_MASS_PROPERTIES_TREE = "?rebuildMassPropertiesTree@HkBreakableCompoundShapeManipulator@@SAXPEAVhknpCompoundShape@@@Z"
-HACK_BREAKABLE_FUNCTIONS = "?hackBreakableCompoundShapeFunctions@HkBreakableCompoundShapeManipulator@@SAXXZ"
-UNREGISTER_SHAPE = "?UnregisterShape@HkMaterialLibrary@@QEAAXPEAVhknpShape@@@Z"
-SET_BODIES_MOTION_TYPE = "?SetBodiesMotionType@HkSession@@QEAA?AUhknpMotionId@@AEAVhknpWorld@@PEAUhknpBodyId@@HPEAUhknpMotionProperties@@W4Enum@hknpMotionType@@@Z"
-GET_MOTION = "?getMotion@hknpWorld@@UEBAAEBVhknpMotion@@UhknpMotionId@@@Z"
-SET_PACKED_MOTION_MASS_PROPERTIES = "?SetMotionMassProperties@HkWorld@@SAXAEAVhknpMotion@@AEBUhkDiagonalizedMassProperties@@AEBUHkPackedWorldTransform@@@Z"
-UPDATE_MOTION_TRANSFORMS = "?UpdateMotionTransforms@HkWorld@@SAXAEAVhknpWorld@@AEBVhknpMotion@@@Z"
-SET_BODY_TO_MOTION_TRANSFORM = "?SetBodyToMotionTransform@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEAUhkQTransform@@W4ActivationMode@hknpWorldWriter@@@Z"
-CONTAINS_CHUNK = "?ContainsChunk@HkSimdTreeGridShape@@QEBA_NUVector3I@@@Z"
-IS_SHAPE_INDEX_VALID = "?IsShapeIndexValid@HkSimdTreeGridShape@@QEBA_NI@Z"
-GET_CHILD_SHAPE = "?GetChildShape@HkSimdTreeGridShape@@QEBAPEBVhknpShape@@I@Z"
-IS_BODY_ADDED = "?isBodyAdded@hknpWorld@@UEBA_NUhknpBodyId@@@Z"
-GET_BODY_MOTION_ID = "?GetBodyMotionId@HkWorld@@SA?AUhknpMotionId@@AEAVhknpWorld@@UhknpBodyId@@@Z"
-CLEAR_MOTION_GRAVITY = "?ClearMotionGravity@HkGravityModifier@@QEAAXUhknpMotionId@@@Z"
-REMOVE_INSTANCES = "?RemoveInstances@@YAXPEAVhknpCompoundShape@@AEBV?$hkArrayView@$$CBI@@@Z"
-GET_FLOAT32 = "?getFloat32@hkHalf16@@QEBAMXZ"
-DISABLE_BODY_FLAGS = "?disableBodyFlags@hknpWorld@@UEAAXUhknpBodyId@@UhknpCollisionFlags@@W4ActivationMode@hknpWorldWriter@@W4UpdateCachesMode@5@@Z"
-NEAREST_POINTS_TO_POINT = "?NearestPointsToPoint@HkColliderQueryDispatcher@@SAXAEBUHkColliderNearestPointsArgs@1@AEAU?$HkBufferReference@UHkColliderNearestQueryHit@HkColliderQueryDispatcher@@@@@Z"
-QUERY_NEAREST_POINTS_TO_POINT = "?NearestPointsToPoint@HkQueryDispatcher@@SAXAEBUHkNearestPointsToPointArgs@1@AEAU?$HkBufferReference@UHkNearestQueryHit@HkQueryDispatcher@@@@@Z"
-QUERY_AABB = "?QueryAabb@HkQueryDispatcher@@SAXAEBUHkQueryAabbArgs@1@AEAU?$HkBufferReference@UhknpBodyId@@@@@Z"
-COLLIDER_QUERY_AABB = "?QueryAabb@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@UvrShapeKey@@@@@Z"
-MUTATE_BOX = "?MutateBox@@YAXPEAVhknpBoxShape@@AEBUvrBoxParameters@@@Z"
-FIND_LEAF = "?FindLeaf@@YA_NPEBVhknpShape@@IPEAPEBV1@PEAUHkTriangleOrQuad@@PEAG@Z"
-ALLOCATE_CALLBACK_VELOCITY_CONSTRAINT_MOTOR = "?AllocateCallbackVelocityConstraintMotor@HkConstraintHandler@@SAPEAVvrCallbackVelocityConstraintMotor@@MMMMM@Z"
-ALLOCATE_LIMITED_HINGE_CONSTRAINT_DATA = "?AllocateLimitedHingeConstraintData@HkConstraintHandler@@SAPEAVhknpLimitedHingeConstraintData@@AEBUHkSingleAxisConstraintArgs@1@@Z"
-ALLOCATE_PRISMATIC_CONSTRAINT_DATA = "?AllocatePrismaticConstraintData@HkConstraintHandler@@SAPEAVhknpPrismaticConstraintData@@AEBUHkSingleAxisConstraintArgs@1@@Z"
-SET_ANGLE = "?SetAngle@HkConstraintHandler@@SAXPEBVhknpConstraint@@M@Z"
-SET_MOTOR_ENABLED_LIMITED_HINGE = "?SetMotorEnabled@HkConstraintHandler@@SAXAEAVhknpLimitedHingeConstraintData@@_N@Z"
-SET_MOTOR_ENABLED_PRISMATIC = "?SetMotorEnabled@HkConstraintHandler@@SAXAEAVhknpPrismaticConstraintData@@_N@Z"
-SET_MOTOR_ENABLED_WHEEL = "?SetMotorEnabled@HkConstraintHandler@@SAXAEAVhknpWheelConstraintData@@_N@Z"
-GET_ANGLE = "?GetAngle@HkConstraintHandler@@SAMPEBVhknpConstraint@@@Z"
-SET_MOTOR_TARGET_ANGLE_LIMITED_HINGE = "?setMotorTargetAngle@hknpLimitedHingeConstraintData@@QEAAXM@Z"
-SET_MAX_ANGULAR_LIMIT_LIMITED_HINGE = "?setMaxAngularLimit@hknpLimitedHingeConstraintData@@QEAAXM@Z"
-SET_MIN_LINEAR_LIMIT_PRISMATIC = "?setMinLinearLimit@hknpPrismaticConstraintData@@QEAAXM@Z"
-SET_MAX_LINEAR_LIMIT_PRISMATIC = "?setMaxLinearLimit@hknpPrismaticConstraintData@@QEAAXM@Z"
-SET_VELOCITY_TARGET_CALLBACK_MOTOR = "?setVelocityTarget@vrCallbackVelocityConstraintMotor@@QEAAXM@Z"
-SET_MOTOR_TARGET_POSITION_PRISMATIC = "?setMotorTargetPosition@hknpPrismaticConstraintData@@QEAAXM@Z"
-SET_BODY_NOT_TO_COLLIDE_WITH = "?setBodyNotToCollideWith@@YAXPEAVhknpCompoundShape@@IUhknpBodyId@@@Z"
-SET_SHAPE_AT_LOD = "?setShapeAtLod@hknpLodShape@@QEAA?AUhkResult@@W4hknpLevelOfDetail@@PEBVhknpShape@@@Z"
-ALLOCATE_POSITION_CONSTRAINT_MOTOR = "?AllocatePositionConstraintMotor@HkConstraintHandler@@SAPEAVhknpPositionConstraintMotor@@MMMMMM@Z"
-ALLOCATE_VELOCITY_CONSTRAINT_MOTOR = "?AllocateVelocityConstraintMotor@HkConstraintHandler@@SAPEAVhknpVelocityConstraintMotor@@MMMMM@Z"
-ALLOCATE_WHEEL_CONSTRAINT_DATA = "?AllocateWheelConstraintData@HkConstraintHandler@@SAPEAVhknpWheelConstraintData@@AEBUHkWheelConstraintArgs@1@@Z"
-UPDATE_INSTANCES = "?UpdateInstances@@YAXPEAVhknpCompoundShape@@AEBV?$hkArrayView@$$CBI@@AEBV?$hkArrayView@$$CBUHkPackedCompoundShapeInstance@@@@@Z"
-UPDATE_SIMD_TREE_SHAPES = "?UpdateShapes@HkSimdTreeGridShape@@QEAAXPEBIPEAPEBVhknpShape@@H@Z"
-SET_MANIFOLD_INERTIA_MULTIPLIER = "?set@VrManifoldInertiaMultiplier@@SAXPEAVhknpWorld@@UhknpBodyId@@AEBU1@@Z"
-SET_WHEEL_FRICTION_ENABLED = "?setFrictionEnabled@hknpWheelConstraintData@@QEAAX_N@Z"
-SET_WHEEL_STEERING_ANGLE = "?setSteeringAngle@hknpWheelConstraintData@@QEAAXM@Z"
-SET_BODY_QUALITY = "?setBodyQuality@hknpWorld@@UEAAXUhknpBodyId@@UhknpBodyQualityId@@W4ActivationMode@hknpWorldWriter@@W4UpdateCachesMode@5@@Z"
-SET_WHEEL_SUSPENSION_DAMPING = "?setSuspensionDampingFactor@hknpWheelConstraintData@@QEAAXM@Z"
-SET_WHEEL_SUSPENSION_STRENGTH = "?setSuspensionStrengthFactor@hknpWheelConstraintData@@QEAAXM@Z"
-SET_WHEEL_MAX_FRICTION_TORQUE = "?setMaxFrictionTorque@hknpWheelConstraintData@@QEAAXM@Z"
+
+PRIMITIVES = {
+    "void": "void", "bool": "bool4", "byte": "u1", "sbyte": "i1",
+    "short": "i2", "ushort": "u2", "int": "i4", "uint": "u4",
+    "long": "i8", "ulong": "u8", "float": "r4", "double": "r8",
+    "nint": "ptr", "IntPtr": "ptr", "nuint": "u8", "UIntPtr": "u8",
+    "string": "str",
+}
+BYTE_ENUMS = {
+    "HkLayerInteractionInteractType", "HkLog.Level", "Level",
+    "HknpConnectivityGraph.CompressedIntArray.IntSize", "IntSize", "HknpLevelOfDetail",
+    "VrBodyPartProvider", "VrDestructionIgnoredReason", "VrDestructionManifoldFlags",
+}
+SBYTE_ENUMS = {"HkRagdoll.State", "State"}
+INT_ENUMS = {
+    "AxisIdentifier", "AxisMode", "HknpActivationControl.Enum",
+    "HknpActivationState.Enum", "HknpBodyQualityId.Preset", "Preset",
+    "HknpBreakableCompoundShape.Status", "Status", "HknpCollisionDispatchType.Enum", "Enum",
+    "HknpConstraint.FlagsEnum", "FlagsEnum", "ConstraintType", "Mutability",
+    "UpdateAtomsResult.Enum", "HknpMotionType.Enum", "MassConfig.Quality", "Quality",
+    "ScaleMode", "HknpShapeType.Enum", "ActivationMode", "AdditionMode",
+    "PivotLocation", "UpdateCachesMode", "UpdateMotionMode",
+}
+INTEGER_STRUCTS = {
+    "HknpBodyId.__Internal": 8, "HknpConstraintId.__Internal": 8,
+    "HknpCollisionFlags.__Internal": 8, "HknpMotionId.__Internal": 4,
+    "HknpMaterialId.__Internal": 2, "HknpBodyQualityId.__Internal": 1,
+    "__Internal": 1, "MotionSharing.BodyPartId": 4, "BodyPartId": 4,
+    "HkSimplificationParameters.__Internal": 8,
+}
 
 
-def load_signatures():
+def lower_type(value, return_i1=False, modifier=None):
+    value = normalize_type(value)
+    if modifier in {"ref", "out", "in"} or value.endswith("*"):
+        return {"kind": "ptr"}
+    if value == "bool" and return_i1:
+        return {"kind": "bool1"}
+    if value in PRIMITIVES:
+        return {"kind": PRIMITIVES[value]}
+    if any(value == name or value.endswith(f".{name}") for name in BYTE_ENUMS):
+        return {"kind": "u1"}
+    if any(value == name or value.endswith(f".{name}") for name in SBYTE_ENUMS):
+        return {"kind": "i1"}
+    if any(value == name or value.endswith(f".{name}") for name in INT_ENUMS):
+        return {"kind": "i4"}
+    if value.startswith("HkFlags<"):
+        storage = value.rsplit(",", 1)[-1].rstrip(">")
+        if storage in PRIMITIVES:
+            return {"kind": PRIMITIVES[storage]}
+    for name, size in INTEGER_STRUCTS.items():
+        if value == name or value.endswith(f".{name}"):
+            return {"kind": "struct", "cls": ["int"], "size": size}
+    if value == "HkSimdFloat" or value.endswith(".HkSimdFloat"):
+        return {"kind": "struct", "type": "HkSimdFloat", "size": 16}
+    raise SystemExit(f"unsupported Physics C# ABI type: {value}")
+
+
+def load_signatures(declarations):
     signatures = {}
-    paths = [CAPTURES / stamp / "VRage.Physics.Native.jsonl"
-             for stamp in ("20260718-135130", "20260718-135240", "20260718-135348")]
-    if len(paths) != 3:
-        raise SystemExit(f"expected 3 Physics captures, found {len(paths)}")
-    for path in paths:
-        with path.open(encoding="utf-8") as stream:
-            for line in stream:
-                if '"ph":"sig"' not in line:
-                    continue
-                record = json.loads(line)
-                signature = {"name": record["fn"], "ret": record["ret"], "params": record["params"]}
-                previous = signatures.setdefault(record["ep"], signature)
-                if previous != signature:
-                    raise SystemExit(f"conflicting signature for {record['ep']}")
-    if len(signatures) != 153:
-        raise SystemExit(f"expected 153 Physics exports, found {len(signatures)}")
-    signatures[REMOVE_BODIES] = {
-        "name": "removeBodies",
-        "ret": {"kind": "void"},
-        "params": [
-            {"kind": "ptr", "n": "instance"},
-            {"kind": "ptr", "n": "bodyIds"},
-            {"kind": "i4", "n": "numBodyIds"},
-            {"kind": "i4", "n": "activationMode"},
-        ],
-    }
-    signatures[DESTROY_BODIES] = {
-        "name": "destroyBodies",
-        "ret": {"kind": "void"},
-        "params": [
-            {"kind": "ptr", "n": "instance"},
-            {"kind": "ptr", "n": "bodyIds"},
-            {"kind": "i4", "n": "numBodyIds"},
-            {"kind": "i4", "n": "activationMode"},
-        ],
-    }
-    signatures[GET_BODY_CONSTRAINT_IDS] = {
-        "name": "GetBodyConstraintIds",
-        "ret": {"kind": "void"},
-        "params": [
-            {"kind": "ptr", "n": "instance"},
-            {"kind": "ptr", "n": "world"},
-            {"kind": "u8", "n": "body"},
-            {"kind": "ptr", "n": "constraintIdsOut"},
-        ],
-    }
-    signatures[DESTROY_BODY_CONSTRAINTS] = {
-        "name": "DestroyBodyConstraints",
-        "ret": {"kind": "void"},
-        "params": [
-            {"kind": "ptr", "n": "instance"},
-            {"kind": "ptr", "n": "world"},
-            {"kind": "u8", "n": "body"},
-        ],
-    }
-    signatures[GET_CHILD] = {
-        "name": "GetChild",
-        "ret": {"kind": "bool1"},
-        "params": [
-            {"kind": "ptr", "n": "compositeCollider"},
-            {"kind": "u4", "n": "index"},
-            {"kind": "ptr", "n": "child"},
-        ],
-    }
-    signatures[GET_SHAPE_CHUNK] = {
-        "name": "GetShapeChunk",
-        "ret": {"kind": "void"},
-        "params": [
-            {"kind": "ptr", "n": "instance"},
-            {"kind": "ptr", "n": "returnValue"},
-            {"kind": "u4", "n": "shapeId"},
-        ],
-    }
-    signatures[CLONE_SHAPE_SHALLOW] = {
-        "name": "CloneShapeShallow",
-        "ret": {"kind": "ptr"},
-        "params": [{"kind": "ptr", "n": "shape"}],
-    }
-    signatures[DISJOINT_EDGE] = {"name": "DisjointEdge", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "i4", "n": "edgeId"}]}
-    signatures[DISJOINT_NODE_EDGES] = {"name": "DisjointNodeEdges", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "u4", "n": "nodeId"}]}
-    signatures[DISJOINT_SETS] = {"name": "DisjointSets", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "shape"}]}
-    signatures[DISPOSE_SETS] = {"name": "DisposeSets", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "sets"}]}
-    signatures[REBUILD_MASS_PROPERTIES_TREE] = {"name": "RebuildMassPropertiesTree", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "compoundShape"}]}
-    signatures[HACK_BREAKABLE_FUNCTIONS] = {"name": "HackBreakableCompoundShapeFunctions", "ret": {"kind": "void"}, "params": []}
-    signatures[UNREGISTER_SHAPE] = {"name": "UnregisterShape", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "shape"}]}
-    signatures[SET_BODIES_MOTION_TYPE] = {"name": "SetBodiesMotionType", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "returnValue"}, {"kind": "ptr", "n": "world"}, {"kind": "ptr", "n": "bodyIds"}, {"kind": "i4", "n": "count"}, {"kind": "ptr", "n": "properties"}, {"kind": "i4", "n": "motionType"}]}
-    signatures[GET_MOTION] = {"name": "GetMotion", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u4", "n": "motionId"}]}
-    signatures[SET_PACKED_MOTION_MASS_PROPERTIES] = {"name": "SetPackedMotionMassProperties", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "motion"}, {"kind": "ptr", "n": "massProperties"}, {"kind": "ptr", "n": "worldTransform"}]}
-    signatures[UPDATE_MOTION_TRANSFORMS] = {"name": "UpdateMotionTransforms", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "world"}, {"kind": "ptr", "n": "motion"}]}
-    signatures[SET_BODY_TO_MOTION_TRANSFORM] = {"name": "SetBodyToMotionTransform", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "world"}, {"kind": "u8", "n": "bodyId"}, {"kind": "ptr", "n": "transform"}, {"kind": "i4", "n": "activationMode"}]}
-    signatures[CONTAINS_CHUNK] = {"name": "ContainsChunk", "ret": {"kind": "bool1"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "chunkPos"}]}
-    signatures[IS_SHAPE_INDEX_VALID] = {"name": "IsShapeIndexValid", "ret": {"kind": "bool1"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u4", "n": "index"}]}
-    signatures[GET_CHILD_SHAPE] = {"name": "GetChildShape", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u4", "n": "leafId"}]}
-    signatures[REMOVE_RAGDOLL_FROM_WORLD] = {"name": "RemoveFromWorld", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "i4", "n": "activationMode"}]}
-    signatures[SET_RAGDOLL_ENTITY_LAYER] = {"name": "SetRagdollEntityLayer", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "i4", "n": "entityLayerIndex"}]}
-    signatures[GET_RAGDOLL_ROOT_TRANSFORM] = {"name": "GetRagdollRootTransform", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "returnValue"}]}
-    signatures[SESSION_DTOR] = {"name": "HkSession_dtor", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}]}
-    signatures[IS_BODY_ADDED] = {"name": "isBodyAdded", "ret": {"kind": "bool1"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u8", "n": "bodyId"}]}
-    signatures[GET_BODY_MOTION_ID] = {"name": "GetBodyMotionId", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "returnValue"}, {"kind": "ptr", "n": "world"}, {"kind": "u8", "n": "bodyId"}]}
-    signatures[CLEAR_MOTION_GRAVITY] = {"name": "ClearMotionGravity", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u4", "n": "motionId"}]}
-    signatures[REMOVE_INSTANCES] = {"name": "RemoveInstances", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "ptr", "n": "instancesToRemove"}]}
-    signatures[GET_FLOAT32] = {"name": "GetFloat32", "ret": {"kind": "r4"}, "params": [{"kind": "ptr", "n": "instance"}]}
-    signatures[DISABLE_BODY_FLAGS] = {"name": "disableBodyFlags", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u8", "n": "bodyId"}, {"kind": "u8", "n": "flagsToDisable"}, {"kind": "i4", "n": "activationMode"}, {"kind": "i4", "n": "cacheBehavior"}]}
-    signatures[NEAREST_POINTS_TO_POINT] = {"name": "NearestPointsToPoint", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "args"}, {"kind": "ptr", "n": "outHits"}]}
-    signatures[QUERY_NEAREST_POINTS_TO_POINT] = {"name": "HkQueryDispatcher_NearestPointsToPoint", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "args"}, {"kind": "ptr", "n": "outHits"}]}
-    signatures[QUERY_AABB] = {"name": "QueryAabb", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "args"}, {"kind": "ptr", "n": "outHits"}]}
-    signatures[COLLIDER_QUERY_AABB] = {"name": "QueryAabb", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "args"}, {"kind": "ptr", "n": "outHits"}]}
-    signatures[MUTATE_BOX] = {"name": "MutateBox", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "ptr", "n": "parameters"}]}
-    signatures[FIND_LEAF] = {"name": "FindLeaf", "ret": {"kind": "bool1"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "u4", "n": "shapeKey"}, {"kind": "ptr", "n": "leafShape"}, {"kind": "ptr", "n": "triangleOrQuad"}, {"kind": "ptr", "n": "shapeTag"}]}
-    signatures[ALLOCATE_CALLBACK_VELOCITY_CONSTRAINT_MOTOR] = {"name": "AllocateCallbackVelocityConstraintMotor", "ret": {"kind": "ptr"}, "params": [{"kind": "r4", "n": "tau"}, {"kind": "r4", "n": "damping"}, {"kind": "r4", "n": "velocityTarget"}, {"kind": "r4", "n": "minForce"}, {"kind": "r4", "n": "maxForce"}]}
-    signatures[ALLOCATE_LIMITED_HINGE_CONSTRAINT_DATA] = {"name": "AllocateLimitedHingeConstraintData", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "args"}]}
-    signatures[ALLOCATE_PRISMATIC_CONSTRAINT_DATA] = {"name": "AllocatePrismaticConstraintData", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "args"}]}
-    signatures[SET_ANGLE] = {"name": "SetAngle", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "constraint"}, {"kind": "r4", "n": "angle"}]}
-    signatures[SET_MOTOR_ENABLED_LIMITED_HINGE] = {"name": "SetMotorEnabled", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "data"}, {"kind": "bool1", "n": "enabled"}]}
-    signatures[SET_MOTOR_ENABLED_PRISMATIC] = {"name": "SetMotorEnabledPrismatic", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "data"}, {"kind": "bool1", "n": "enabled"}]}
-    signatures[SET_MOTOR_ENABLED_WHEEL] = {"name": "SetMotorEnabledWheel", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "data"}, {"kind": "bool1", "n": "enabled"}]}
-    signatures[GET_ANGLE] = {"name": "GetAngle", "ret": {"kind": "r4"}, "params": [{"kind": "ptr", "n": "constraint"}]}
-    signatures[SET_MOTOR_TARGET_ANGLE_LIMITED_HINGE] = {"name": "SetMotorTargetAngle", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "angle"}]}
-    signatures[SET_MAX_ANGULAR_LIMIT_LIMITED_HINGE] = {"name": "SetMaxAngularLimit", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "angle"}]}
-    signatures[SET_MIN_LINEAR_LIMIT_PRISMATIC] = {"name": "SetMinLinearLimit", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "limit"}]}
-    signatures[SET_MAX_LINEAR_LIMIT_PRISMATIC] = {"name": "SetMaxLinearLimit", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "limit"}]}
-    signatures[SET_VELOCITY_TARGET_CALLBACK_MOTOR] = {"name": "SetCallbackMotorVelocityTarget", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "velocity"}]}
-    signatures[SET_MOTOR_TARGET_POSITION_PRISMATIC] = {"name": "SetMotorTargetPosition", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "position"}]}
-    signatures[SET_BODY_NOT_TO_COLLIDE_WITH] = {"name": "SetBodyNotToCollideWith", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "u4", "n": "instanceId"}, {"kind": "u8", "n": "bodyNotToCollideWith"}]}
-    signatures[SET_SHAPE_AT_LOD] = {"name": "SetShapeAtLod", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "returnValue"}, {"kind": "u1", "n": "level"}, {"kind": "ptr", "n": "shape"}]}
-    signatures[ALLOCATE_POSITION_CONSTRAINT_MOTOR] = {"name": "AllocatePositionConstraintMotor", "ret": {"kind": "ptr"}, "params": [{"kind": "r4", "n": "tau"}, {"kind": "r4", "n": "damping"}, {"kind": "r4", "n": "minForce"}, {"kind": "r4", "n": "maxForce"}, {"kind": "r4", "n": "proportionalRecoveryVelocity"}, {"kind": "r4", "n": "constantRecoveryVelocity"}]}
-    signatures[ALLOCATE_VELOCITY_CONSTRAINT_MOTOR] = {"name": "AllocateVelocityConstraintMotor", "ret": {"kind": "ptr"}, "params": [{"kind": "r4", "n": "tau"}, {"kind": "r4", "n": "damping"}, {"kind": "r4", "n": "velocityTarget"}, {"kind": "r4", "n": "minForce"}, {"kind": "r4", "n": "maxForce"}]}
-    signatures[ALLOCATE_WHEEL_CONSTRAINT_DATA] = {"name": "AllocateWheelConstraintData", "ret": {"kind": "ptr"}, "params": [{"kind": "ptr", "n": "args"}]}
-    signatures[UPDATE_INSTANCES] = {"name": "UpdateInstances", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "shape"}, {"kind": "ptr", "n": "instancesToUpdate"}, {"kind": "ptr", "n": "packedInstances"}]}
-    signatures[UPDATE_SIMD_TREE_SHAPES] = {"name": "UpdateSimdTreeShapes", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "ptr", "n": "shapeIds"}, {"kind": "ptr", "n": "shapes"}, {"kind": "i4", "n": "count"}]}
-    signatures[SET_MANIFOLD_INERTIA_MULTIPLIER] = {"name": "SetManifoldInertiaMultiplier", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "world"}, {"kind": "u8", "n": "body"}, {"kind": "ptr", "n": "multiplier"}]}
-    signatures[SET_WHEEL_FRICTION_ENABLED] = {"name": "SetWheelFrictionEnabled", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "bool1", "n": "enabled"}]}
-    signatures[SET_WHEEL_STEERING_ANGLE] = {"name": "SetWheelSteeringAngle", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "angle"}]}
-    signatures[SET_BODY_QUALITY] = {"name": "SetBodyQuality", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "u8", "n": "bodyId"}, {"kind": "u1", "n": "qualityId"}, {"kind": "i4", "n": "activationMode"}, {"kind": "i4", "n": "cacheBehavior"}]}
-    signatures[SET_WHEEL_SUSPENSION_DAMPING] = {"name": "SetWheelSuspensionDamping", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "damping"}]}
-    signatures[SET_WHEEL_SUSPENSION_STRENGTH] = {"name": "SetWheelSuspensionStrength", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "strength"}]}
-    signatures[SET_WHEEL_MAX_FRICTION_TORQUE] = {"name": "SetWheelMaxFrictionTorque", "ret": {"kind": "void"}, "params": [{"kind": "ptr", "n": "instance"}, {"kind": "r4", "n": "torque"}]}
-    signatures[HK_QUIT] = {"name": "HkQuit", "ret": {"kind": "void"}, "params": []}
-    signatures = sorted(signatures.items())
+    for declaration in declarations:
+        signature = {
+            "name": declaration["name"],
+            "ret": lower_type(declaration["ret"], declaration["return_i1"]),
+            "params": [dict(lower_type(param["type"], modifier=param["modifier"]), n=param["name"])
+                       for param in declaration["params"]],
+        }
+        identity = (signature["ret"], [{k: v for k, v in param.items() if k != "n"}
+                                        for param in signature["params"]])
+        previous = signatures.get(declaration["entry_point"])
+        if previous and previous[0] != identity:
+            raise SystemExit(f"conflicting signature for {declaration['entry_point']}")
+        signatures.setdefault(declaration["entry_point"], (identity, signature))
+    signatures = sorted((entry_point, value[1]) for entry_point, value in signatures.items())
     counts = Counter(signature["name"] for _, signature in signatures)
     generated = []
     for entry_point, signature in signatures:
-        name = identifier(signature["name"])
+        name = cpp_identifier(signature["name"])
         if counts[signature["name"]] > 1:
-            name = f"{identifier(owner(entry_point))}_{name}"
+            name = f"{cpp_identifier(owner(entry_point))}_{name}"
         generated.append(name)
     generated_counts = Counter(generated)
     used = set()
     for (entry_point, signature), name in zip(signatures, generated):
         if generated_counts[name] > 1:
-            params = [param for param in parameter_names(signature) if param != "instance"]
+            params = [param for param in parameter_names(signature["params"]) if param != "instance"]
             name = f"{name}_{'_'.join(params) or 'void'}"
-        if name in used:
-            raise SystemExit(f"duplicate generated name {name} for {entry_point}")
+        base = name
+        suffix = 2
+        while name in used:
+            name = f"{base}_{suffix}"
+            suffix += 1
         signature["cpp_name"] = name
         used.add(name)
     return signatures
-
-
-def identifier(name):
-    name = re.sub(r"[^A-Za-z0-9_]", "_", name).strip("_")
-    return name if name and not name[0].isdigit() else f"function_{name}"
 
 
 def owner(entry_point):
@@ -282,33 +132,23 @@ def owner(entry_point):
     return match.group(1) if match else "Global"
 
 
-def parameter_names(signature):
-    reserved = {"alignas", "alignof", "and", "asm", "auto", "bool", "break", "case", "catch",
-                "char", "class", "const", "constexpr", "continue", "default", "delete", "do",
-                "double", "else", "enum", "explicit", "extern", "false", "float", "for", "friend",
-                "goto", "if", "inline", "int", "long", "namespace", "new", "noexcept", "not",
-                "nullptr", "operator", "or", "private", "protected", "public", "register", "return",
-                "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw",
-                "true", "try", "typedef", "typename", "union", "unsigned", "using", "virtual", "void",
-                "volatile", "while"}
-    names = []
-    for index, param in enumerate(signature["params"]):
-        name = identifier(param.get("n", f"arg{index}").lstrip("_"))
-        if name in reserved:
-            name += "_value"
-        names.append(name)
-    return names
-
-
 def cpp_type(value):
     if value["kind"] == "struct":
+        if value.get("type") == "HkSimdFloat":
+            return "HkSimdFloat"
         if value.get("cls") != ["int"] or value.get("size") not in STRUCT_TYPES:
             raise SystemExit(f"unsupported struct ABI: {value}")
         return STRUCT_TYPES[value["size"]]
     try:
-        return TYPE_MAP[value["kind"]]
+        return CPP_TYPES[value["kind"]]
     except KeyError:
         raise SystemExit(f"unsupported ABI kind: {value['kind']}") from None
+
+
+def pe_cpp_type(value):
+    if value["kind"] == "struct" and value.get("size", 0) > 8:
+        return f"{cpp_type(value)} *"
+    return cpp_type(value)
 
 
 def emit(signatures):
@@ -320,15 +160,16 @@ def emit(signatures):
         "#include <cstring>",
         "#include <mutex>",
         "#include <stdexcept>",
-        "#include <string>",
         "#include <unordered_map>",
         "",
         '#include "dll_loader.h"',
         "",
+        "struct HkSimdFloat { float values[4]; };",
+        "static_assert(sizeof(HkSimdFloat) == 16);",
+        "",
         "namespace {",
         "pe_image physics_image;",
         "std::mutex physics_mutex;",
-        "std::string physics_path;",
         "",
         "void *sysv_expand_callback;",
         "void *sysv_log_callback;",
@@ -436,7 +277,8 @@ def emit(signatures):
         "",
         "void ensure_thread_info()",
         "{",
-        "    initialize(nullptr, nullptr);",
+        "    if (!physics_image.image)",
+        '        throw std::runtime_error("Physics is not initialized; call Init first");',
         "    if (!setup_nt_threadinfo(nullptr))",
         "        std::abort();",
         "    pe_ensure_tls_for_loaded_images();",
@@ -446,7 +288,7 @@ def emit(signatures):
 
     for _, signature in signatures:
         ret = cpp_type(signature["ret"])
-        params = ", ".join(cpp_type(param) for param in signature["params"]) or "void"
+        params = ", ".join(pe_cpp_type(param) for param in signature["params"]) or "void"
         name = signature["cpp_name"]
         lines.append(f"using {name}_t = {ret}(WINAPI *)({params});")
         lines.append(f"{name}_t p{name};")
@@ -459,25 +301,15 @@ def emit(signatures):
         "    if (physics_image.image)",
         "        return;",
         "",
-        "    if (dll_path) {",
-        "        physics_path = dll_path;",
-        "    } else {",
-        "        // Playback loads exports directly; deployed wrappers receive the path through Init.",
-        '        const char *home = std::getenv("HOME");',
-        "        if (!home)",
-        '            throw std::runtime_error("HOME is not set; call Init with the Physics DLL path");',
-        '        physics_path = std::string(home) + "/Documents/SpaceEngineers2/Game2/VRage.Physics.Native.dll";',
-        "    }",
-        "",
-        "    if (!load_dll(&physics_image, physics_path.c_str(), sidecar_path))",
+        "    if (!dll_path)",
+        '        throw std::invalid_argument("Physics Init requires a DLL path");',
+        "    if (!load_dll(&physics_image, dll_path, sidecar_path))",
         '        throw std::runtime_error("Failed to load VRage.Physics.Native.dll");',
     ]
     for entry_point, signature in signatures:
         name = signature["cpp_name"]
         lines += [
             f'    p{name} = reinterpret_cast<{name}_t>(get_export("{entry_point}"));',
-            f"    if (!p{name})",
-            f'        throw std::runtime_error("Missing Physics export: {entry_point}");',
         ]
     lines += ["}", "}", "", 'extern "C" {', "", "void Init(const char *dll_path, const char *sidecar_path)", "{", "    initialize(dll_path, sidecar_path);", "}", ""]
 
@@ -485,9 +317,10 @@ def emit(signatures):
     for entry_point, signature in signatures:
         ret = cpp_type(signature["ret"])
         name = signature["cpp_name"]
-        names = parameter_names(signature)
+        names = parameter_names(signature["params"])
         declarations = ", ".join(f"{cpp_type(param)} {param_name}" for param, param_name in zip(signature["params"], names)) or "void"
-        arguments = ", ".join(names)
+        arguments = ", ".join(f"&{name}_pe" if param["kind"] == "struct" and param.get("size", 0) > 8 else name
+                              for param, name in zip(signature["params"], names))
         placeholder = entry_point.replace("@", "$")
         if placeholder != entry_point:
             manifest.append(f"{placeholder}\t{entry_point}")
@@ -496,7 +329,12 @@ def emit(signatures):
             f"{ret} {name}({declarations})",
             "{",
             "    ensure_thread_info();",
+            f"    if (!p{name})",
+            f'        throw std::runtime_error("Missing Physics export: {entry_point}");',
         ]
+        for param, param_name in zip(signature["params"], names):
+            if param["kind"] == "struct" and param.get("size", 0) > 8:
+                lines.append(f"    alignas(16) {cpp_type(param)} {param_name}_pe = {param_name};")
         first = names[0] if names else None
         if entry_point == SESSION_CTOR:
             lines += [
@@ -593,6 +431,8 @@ def emit(signatures):
     return "\n".join(lines), "\n".join(manifest) + "\n"
 
 
-source, manifest = emit(load_signatures())
-OUTPUT.write_text(source, encoding="utf-8")
-MANIFEST.write_text(manifest, encoding="utf-8")
+if __name__ == "__main__":
+    declarations = load_generator_declarations("VRage.Physics", "VRage.Physics.Native.dll")
+    source, manifest = emit(load_signatures(declarations))
+    OUTPUT.write_text(source, encoding="utf-8")
+    MANIFEST.write_text(manifest, encoding="utf-8")

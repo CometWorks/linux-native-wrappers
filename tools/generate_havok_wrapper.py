@@ -6,23 +6,18 @@ parsed from the game's decompiled `[DllImport]` declarations. Delegate arguments
 are routed through fixed callback bridges so managed (SysV) callbacks can be
 handed to the Microsoft-ABI Havok.dll.
 
-Generating `Havok.cpp` needs the decompiled C# wrapper
-(`../dotnet-game-local/HavokWrapper/Havok`); the public repo ships the generated
-output so a plain build needs no such dependency.
+The public repo ships the generated output, so a plain build needs no decompiled
+source dependency.
 
 Usage:
-    python3 tools/generate_havok_wrapper.py
+    python3 tools/generate_havok_wrapper.py DECOMPILED_ROOT
 """
 from pathlib import Path
-import re
+
+from csharp_pinvoke import load_generator_declarations
 
 PROJECT_DIR = Path(__file__).parent.parent
-PROJECTS_DIR = PROJECT_DIR.parent
-
-CS_ROOT = PROJECTS_DIR / 'dotnet-game-local/HavokWrapper/Havok'
-
-SRC_DIR = PROJECT_DIR / 'src'
-OUTPUT = SRC_DIR / 'Havok.cpp'
+OUTPUT = PROJECT_DIR / 'src/Havok.cpp'
 
 PRIMITIVES = {
     'void': 'void',
@@ -215,18 +210,11 @@ EXPORT_ALIASES = {
     'HkJobThreadPool_RemoveReference': '?HkJobThreadPool_RemoveReference@Havok@@YAXPEAVhkThreadPool@@@Z',
 }
 
-PINVOKE_SIGNATURE = re.compile(
-    r'(?:public|protected(?:\s+internal)?|internal|private)\s+'
-    r'(?:unsafe\s+)?static\s+extern\s+([^\s]+(?:\.[^\s]+)?)\s+'
-    r'(\w+)\((.*)\);')
-
 PREAMBLE = '''#include <cstdint>
 #include <cstddef>
 #include <atomic>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
@@ -238,23 +226,6 @@ PREAMBLE = '''#include <cstdint>
 #define SET_FUNCTION_POINTER(func) p##func = (WINAPI func##_t)get_export(#func);
 
 #define REQUIRE_FUNCTION_POINTER(func) if (!p##func) {     SET_FUNCTION_POINTER(func)     if (!p##func) {         fprintf(stderr, "Failed to load function: " #func "\\n");         throw std::runtime_error("Failed to load function: " #func);     } }
-
-static void LogMessage(const char *text)
-{
-    std::ofstream("/tmp/ds.txt", std::ios::app) << text << "\\n";
-}
-
-#define LOG_CALL(func) ;
-// Uncomment/comment to enable/disable detailed logging
-/*
-static long long TimestampMs()
-{
-    auto now = std::chrono::steady_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-}
-
-#define LOG_CALL(func) fprintf(stderr, "[%lld] %s\\\\n", TimestampMs(), #func)
-*/
 
 static void EnsureThreadInfo()
 {
@@ -407,7 +378,6 @@ static pe_image g_havok_image;
 static void InitImpl(const char* dllPath, const char* sidecarPath)
 {
     if (!load_dll(&g_havok_image, dllPath, sidecarPath)) {
-        LogMessage("Failed to load Havok.dll");
         throw std::runtime_error("Failed to load Havok.dll");
     }
 '''
@@ -498,36 +468,6 @@ def emit_callback_helpers(specs):
     return '\n'.join(lines)
 
 
-def split_args(arg_string: str):
-    arg_string = arg_string.strip()
-    if not arg_string:
-        return []
-    parts = []
-    current = []
-    depth = 0
-    for ch in arg_string:
-        if ch == ',' and depth == 0:
-            parts.append(''.join(current).strip())
-            current = []
-            continue
-        current.append(ch)
-        if ch in '([{':
-            depth += 1
-        elif ch in ')]}':
-            depth -= 1
-    if current:
-        parts.append(''.join(current).strip())
-    return parts
-
-
-def parse_arg(arg: str):
-    cleaned = re.sub(r'\[[^\]]+\]\s*', '', arg).strip()
-    tokens = cleaned.split()
-    if len(tokens) < 2:
-        raise ValueError(f'Cannot parse argument: {arg!r}')
-    return ' '.join(tokens[:-1]), tokens[-1]
-
-
 def map_value_type(cs_type: str) -> str:
     if cs_type in PRIMITIVES:
         return PRIMITIVES[cs_type]
@@ -563,48 +503,33 @@ def map_call_arg(function: str, cs_type: str, name: str) -> str:
     raise ValueError(f'No fixed callback bridge for {function}.{name}')
 
 
-def load_signatures():
+def load_signatures(declarations):
     signatures = []
-    seen_names = set()
-    for path in sorted(CS_ROOT.rglob('*.cs')):
-        lines = path.read_text(errors='ignore').splitlines()
-        i = 0
-        while i < len(lines):
-            if '[DllImport(' not in lines[i]:
-                i += 1
-                continue
-
-            i += 1
-            while i < len(lines) and lines[i].strip().startswith('['):
-                i += 1
-
-            signature_lines = []
-            while i < len(lines):
-                signature_lines.append(lines[i].strip())
-                if ';' in lines[i]:
-                    break
-                i += 1
-
-            signature = ' '.join(signature_lines)
-            match = PINVOKE_SIGNATURE.search(signature)
-            if match is None:
-                # HavokLinux.Init is provided by hand in FOOTER rather than
-                # generated as a wrapper.
-                i += 1
-                continue
-
-            name = match.group(2).strip()
-            if name in seen_names:
-                i += 1
-                continue
-
-            signatures.append({
-                'ret': match.group(1).strip(),
-                'name': name,
-                'args': [parse_arg(arg) for arg in split_args(match.group(3))],
-            })
-            seen_names.add(name)
-            i += 1
+    seen = {}
+    for declaration in declarations:
+        name = declaration['name']
+        if name == 'Init':
+            continue
+        if declaration['entry_point'] != name:
+            raise SystemExit(
+                f"Havok EntryPoint aliases require an explicit wrapper: "
+                f"{name} -> {declaration['entry_point']}")
+        signature = {
+            'ret': declaration['ret'],
+            'name': name,
+            'args': [(
+                f"{parameter['modifier']} {parameter['type']}"
+                if parameter['modifier'] else parameter['type'],
+                parameter['name'],
+            ) for parameter in declaration['params']],
+        }
+        identity = (signature['ret'], tuple(cs_type for cs_type, _ in signature['args']))
+        previous = seen.get(name)
+        if previous and previous[0] != identity:
+            raise SystemExit(f'conflicting Havok signature for {name}')
+        if previous is None:
+            seen[name] = (identity, signature)
+            signatures.append(signature)
     return signatures
 
 
@@ -615,7 +540,6 @@ def emit_wrapper(sig):
     arg_names = '' if name == PHANTOM_CALLBACK_CREATE else ', '.join(
         map_call_arg(name, t, n) for t, n in sig['args'])
     lines = [f'{ret} {name}({params}) {{ EnsureThreadInfo();']
-    lines.append(f'    LOG_CALL({name});')
     lines.append(f'    REQUIRE_FUNCTION_POINTER({name})')
     if name == PHANTOM_CALLBACK_CREATE:
         enter, leave, delete = (arg_name for _, arg_name in sig['args'])
@@ -646,13 +570,9 @@ def emit_wrapper(sig):
     return lines
 
 
-def main():
-    signatures = load_signatures()
+def main(declarations):
+    signatures = load_signatures(declarations)
     specs = callback_specs(signatures)
-    for path in SRC_DIR.glob('HavokThunk_*.cpp'):
-        path.unlink()
-    (SRC_DIR / 'HavokThunkRegistry.h').unlink(missing_ok=True)
-
     lines = [PREAMBLE, emit_callback_helpers(specs), PHANTOM_CALLBACK_HELPERS, STRUCTS]
     for sig in signatures:
         ret = map_return_type(sig['ret'])
@@ -676,4 +596,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(load_generator_declarations('HavokWrapper', 'Havok.dll'))
