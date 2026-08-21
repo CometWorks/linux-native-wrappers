@@ -23,6 +23,7 @@ are provided based on Linux primitives, including optional ntsync support.
 | `libVRage.Platform.Windows.Native.so` | `VRage.Platform.Windows.Native.dll` native substitute |
 | `libVRage.Slug.Native.so` | `VRage.Slug.Native.dll` (text rendering) |
 | `libVRage.Physics.Native.so` | `VRage.Physics.Native.dll` (physics) |
+| `libVRage.Voxels.Native.so` | `VRage.Voxels.Native.dll` (voxels) |
 
 ## Havok callback bridge thunks
 

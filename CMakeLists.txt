@@ -96,6 +96,13 @@ add_library(
         src/Physics.cpp
 )
 
+add_library(
+        Voxels
+        SHARED
+        ${SOURCES}
+        src/Voxels.cpp
+)
+
 set_target_properties(D3DCompiler PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
@@ -120,6 +127,11 @@ set_target_properties(Physics PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+set_target_properties(Voxels PROPERTIES
+        OUTPUT_NAME "VRage.Voxels.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
 # Link libraries (if any)
 target_link_libraries(${PROJECT_NAME} PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
@@ -139,6 +151,7 @@ add_custom_command(TARGET Physics POST_BUILD
         COMMAND python3 "${CMAKE_SOURCE_DIR}/tools/rename_physics_exports.py"
                 "$<TARGET_FILE:Physics>" "${CMAKE_SOURCE_DIR}/src/Physics.exports"
 )
+target_link_libraries(Voxels PRIVATE c ${CMAKE_DL_LIBS})
 
 # Compiler flags
 #-Werror -Wextra
@@ -151,6 +164,7 @@ target_compile_options(KytheraV2 PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(PlatformWindows PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(Slug PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(Physics PRIVATE -Wall -fpermissive -fPIC)
+target_compile_options(Voxels PRIVATE -Wall -fpermissive -fPIC)
 
 add_executable(generate_pe_sidecar
         src/pe_sidecar.cpp
