@@ -76,12 +76,23 @@ add_library(
         src/KytheraV2.cpp
 )
 
+add_library(
+        PlatformWindows
+        SHARED
+        src/PlatformWindows.cpp
+)
+
 set_target_properties(D3DCompiler PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 set_target_properties(KytheraV2 PROPERTIES
         OUTPUT_NAME "VRage.KytheraV2.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(PlatformWindows PROPERTIES
+        OUTPUT_NAME "VRage.Platform.Windows.Native"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
@@ -92,6 +103,7 @@ target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(KytheraV2 PRIVATE c)
+target_link_libraries(PlatformWindows PRIVATE c)
 
 # Compiler flags
 #-Werror -Wextra
@@ -101,6 +113,7 @@ target_compile_options(Havok PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(KytheraV2 PRIVATE -Wall -fpermissive -fPIC)
+target_compile_options(PlatformWindows PRIVATE -Wall -fpermissive -fPIC)
 
 add_executable(generate_pe_sidecar
         src/pe_sidecar.cpp

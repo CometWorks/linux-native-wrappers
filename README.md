@@ -20,6 +20,7 @@ are provided based on Linux primitives, including optional ntsync support.
 | `libVRageNative.so`  | `VRage.Native.dll` (voxels) |
 | `libD3DCompiler.so`  | `d3dcompiler_47.dll` (shader compiler) |
 | `libVRage.KytheraV2.Native.so` | `VRage.KytheraV2.Native.dll` compatibility shim |
+| `libVRage.Platform.Windows.Native.so` | `VRage.Platform.Windows.Native.dll` native substitute |
 
 ## Havok callback bridge thunks
 
