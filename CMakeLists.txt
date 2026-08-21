@@ -82,6 +82,13 @@ add_library(
         src/PlatformWindows.cpp
 )
 
+add_library(
+        Slug
+        SHARED
+        ${SOURCES}
+        src/Slug.cpp
+)
+
 set_target_properties(D3DCompiler PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
@@ -96,6 +103,11 @@ set_target_properties(PlatformWindows PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+set_target_properties(Slug PROPERTIES
+        OUTPUT_NAME "VRage.Slug.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
 # Link libraries (if any)
 target_link_libraries(${PROJECT_NAME} PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
@@ -104,6 +116,11 @@ target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(KytheraV2 PRIVATE c)
 target_link_libraries(PlatformWindows PRIVATE c)
+target_link_libraries(Slug PRIVATE c ${CMAKE_DL_LIBS})
+target_link_options(Slug PRIVATE -Wl,--hash-style=sysv)
+add_custom_command(TARGET Slug POST_BUILD
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/tools/rename_slug_exports.py" "$<TARGET_FILE:Slug>"
+)
 
 # Compiler flags
 #-Werror -Wextra
@@ -114,6 +131,7 @@ target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(KytheraV2 PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(PlatformWindows PRIVATE -Wall -fpermissive -fPIC)
+target_compile_options(Slug PRIVATE -Wall -fpermissive -fPIC)
 
 add_executable(generate_pe_sidecar
         src/pe_sidecar.cpp

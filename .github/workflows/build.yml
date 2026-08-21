@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           # Build and package every wrapper.
-          libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so libVRage.KytheraV2.Native.so libVRage.Platform.Windows.Native.so"
+          libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so libVRage.KytheraV2.Native.so libVRage.Platform.Windows.Native.so libVRage.Slug.Native.so"
           # Build each configuration into its own tree and archive the
           # .so files at the root of a tarball. Release keeps the historical
           # asset name; Debug gets the `.debug` variant name.
