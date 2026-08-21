@@ -1,152 +1,120 @@
 # Linux Native Wrappers
 
-Linux shared libraries for **Space Engineers** (version 1) to load the native
-Windows DLLs the game client and its Dedicated Server require.
+Linux shared libraries that let Space Engineers 1 and Space Engineers 2 load
+the Windows native DLLs they use. Most wrappers are thin C++17 shims around a
+custom PE (Portable Executable) loader. They load the original DLL, translate
+calls between the System V and Microsoft x64 ABIs, and provide the required
+Win32 calls with Linux primitives. The Win32 layer can use ntsync when the
+kernel supports it.
 
-These are thin C++17 shims built around a custom PE (Portable Executable)
-loader. They load the original, unmodified Windows native DLLs shipped with the
-game and thunk calls across the ABI boundary so the game runs on Linux.
-
-Most wrappers do **not** reimplement any of the underlying libraries.
-Implementations of the Win32 API calls used by the native libraries
-are provided based on Linux primitives, including optional ntsync support.
+KytheraV2 and PlatformWindows are exceptions. KytheraV2 is a compatibility
+stub with no navigation implementation. PlatformWindows is a native presenter
+adapter and does not load a Windows DLL.
 
 ## Libraries built
 
-| Output               | Wraps the Windows DLL |
-| -------------------- |-----------------------|
-| `libHavok.so`        | `Havok.dll` (physics) |
-| `libRecastDetour.so` | `RecastDetour.dll` (navmesh) |
-| `libVRageNative.so`  | `VRage.Native.dll` (voxels) |
-| `libD3DCompiler.so`  | `d3dcompiler_47.dll` (shader compiler) |
-| `libVRage.KytheraV2.Native.so` | `VRage.KytheraV2.Native.dll` compatibility shim |
-| `libVRage.Platform.Windows.Native.so` | `VRage.Platform.Windows.Native.dll` native substitute |
-| `libVRage.Slug.Native.so` | `VRage.Slug.Native.dll` (text rendering) |
-| `libVRage.Physics.Native.so` | `VRage.Physics.Native.dll` (physics) |
-| `libVRage.Voxels.Native.so` | `VRage.Voxels.Native.dll` (voxels) |
+| Output | Game | Purpose |
+| --- | --- | --- |
+| `libHavok.so` | SE1 | Loads `Havok.dll` for physics |
+| `libRecastDetour.so` | SE1 | Loads `RecastDetour.dll` for navmesh |
+| `libVRageNative.so` | SE1 | Loads `VRage.Native.dll` for voxels |
+| `libD3DCompiler.so` | SE1 | Loads `d3dcompiler_47.dll` for shader compilation |
+| `libVRage.KytheraV2.Native.so` | SE2 | Provides the KytheraV2 compatibility stub |
+| `libVRage.Platform.Windows.Native.so` | SE2 | Provides the native presenter adapter |
+| `libVRage.Slug.Native.so` | SE2 | Loads `VRage.Slug.Native.dll` for text rendering |
+| `libVRage.Physics.Native.so` | SE2 | Loads `VRage.Physics.Native.dll` for physics |
+| `libVRage.Voxels.Native.so` | SE2 | Loads `VRage.Voxels.Native.dll` for voxels |
 
-## Havok callback bridge thunks
+## Generated wrappers
 
-`Havok.dll` hands the engine raw C function pointers for its callbacks (contact
-listeners, entity listeners, phantom handlers, …) and passes **no user-data /
-context pointer** when it later invokes them. To route each callback back to the
-correct managed target we therefore need a *distinct code address per live
-callback*. `src/HavokThunk_*.cpp` provide these: for every callback signature
-family there is a pool of `CALLBACK_SLOTS` template-instantiated thunks
-(`<family>_thunk<Index>`), each of which reads its target from a per-slot table.
-Invoking a callback is a single lock-free atomic load; registering and releasing
-one (`bridge_*` / `release_*`) is O(1) via an index map plus a free-list of slots.
+The Havok, Physics, and Voxels wrappers are generated from decompiled C#
+`DllImport` declarations. Their generated C++ files are committed, so building
+the project does not require decompiled sources.
 
-The full per-family mapping, sizing rationale, limits and margins are documented in
-[`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
-
-Those thunk addresses are baked into the binary at compile time, so **the pool
-size is fixed per build and cannot be grown at run time** (doing so would require
-emitting machine code / JIT trampolines, which is architecture-specific and out
-of scope for a generated wrapper).
-
-`src/Havok.cpp` (one `extern "C"` shim per Havok.dll export) and the thunk sources
-are regenerated together by
-[`tools/generate_havok_wrapper.py`](tools/generate_havok_wrapper.py):
+Each generator takes one decompiled source root. The root may contain the
+assembly directly, under `src/`, or be the assembly directory itself.
 
 ```bash
-python3 tools/generate_havok_wrapper.py   # rewrites src/Havok.cpp, src/HavokThunk_*.cpp, HavokThunkRegistry.h
+python3 tools/generate_havok_wrapper.py /path/to/se1/decompiled
+python3 tools/generate_physics_wrapper.py /path/to/se2/decompiled
+python3 tools/generate_voxels_wrapper.py /path/to/se2/decompiled
 ```
 
-Generating `Havok.cpp` parses the game's decompiled `[DllImport]` declarations from
-`../dotnet-game-local/HavokWrapper/Havok`; that dependency is only needed to
-*regenerate*, not to build, since the generated sources are committed.
+These commands rewrite `src/Havok.cpp`, `src/Physics.cpp`,
+`src/Physics.exports`, and `src/Voxels.cpp` as applicable. Run the generator
+tests after regeneration:
 
-### `CALLBACK_SLOTS` limitation and per-family sizing
+```bash
+ctest --test-dir build --output-on-failure
+```
 
-Each pool holds a fixed number of slots (one templated thunk each), baked in at
-compile time, so binary size and compile time grow roughly linearly with the
-total slot count. Rather than one flat limit for every family, `CALLBACK_SLOTS`
-in the generator sizes each family to its worst case. The size a family needs
-depends entirely on how the game's Havok wrapper marshals that callback:
+### Havok callbacks
 
-- **Shared `static` delegates** — entity/contact/sound listeners, constraint and
-  activation listeners, wheel modifiers, break-off handlers and the log sink all
-  hold their native delegate in a `static readonly` field and dispatch per-instance
-  via the listener handle passed as the first argument. These marshal to a *single*
-  pointer no matter how many grids, blocks or constraints exist, so each is sized to
-  its tiny fixed peak: a family with exactly one such pointer collapses to a
-  **single-slot** bridge (no map/free-list), and a family with a few gets the
-  smallest power of two ≥ 16× that peak. (Note: a `static` *method* passed as a bare
-  method-group argument is **not** in this class — the game does not cache that
-  conversion, so it marshals a fresh pointer each time; see the doc.)
-- **Per-instance delegates** — `HkPhantomCallbackShape` is the only wrapper that
-  marshals a *fresh* native delegate per instance: every live phantom shape burns
-  2 `void_ptr_ptr` slots (enter/leave). The game creates one phantom shape per
-  trigger/detector volume — ship connectors and ejectors, collectors, gravity
-  generators, merge blocks, safe zones, and opt-in detector entities — so
-  **`void_ptr_ptr` scales with block count** and gets **32768** slots. Loading
-  *"Many Lifters Slowness"* (699 grids) exhausted the previous flat limit of 4096
-  and aborted. These slots are **reclaimed when the shape is destroyed** (see
-  below), so 32768 bounds the *concurrent* number of live phantoms, not the
-  cumulative total ever created.
-- **Per-call synchronous delegates** — `HkShapeLoader` buffer cleanup marshals a
-  fresh callback per call that Havok invokes only during the call, so the wrapper
-  releases its slot right after (no leak), sizing it for loader concurrency (128).
-  `HkConstraint.FindConnectedConstraints` is the same: its `reader` is a bare
-  method-group (`ConstraintReader`) that marshals a **fresh** pointer per world load,
-  so bridging it without release pinned the first load's thunk and aborted on the
-  second world load. It is now released after each (synchronous) call and given a
-  128-slot pool. The dormant `HkTaskProfiler` callbacks are a latent copy of the same
-  pattern. See [`docs/HavokCallbackBridge.md`](docs/HavokCallbackBridge.md).
+Havok accepts Microsoft-ABI callback pointers, while managed delegates use the
+System V ABI on Linux. The generated wrapper uses one fixed bridge for each
+static semantic callback, serialized bridges for the two callbacks that live
+only for a native call, and three shared bridges for phantom shapes. Phantom
+callbacks are routed through a map keyed by the native shape pointer.
 
-This keeps `libHavok.so` at ~17 MB (versus ~180 MB if every family used 32768).
-If a pool is ever exhausted anyway, the bridge prints a diagnostic naming the
-offending family and pointing back at the generator, then aborts; raise that
-family's entry in `CALLBACK_SLOTS`, regenerate, and rebuild. Run-time growth is
-not possible — the thunk addresses are compile-time template instantiations.
+### Decorated SE2 exports
 
-### Phantom-shape slot reclaim
+Some MSVC-decorated Physics and Slug exports contain `@`, which GNU ELF tools
+interpret as symbol-version syntax. The source uses equal-length `$`
+placeholders. Post-build scripts replace those names in the ELF dynamic string
+table and rebuild its System V symbol hash.
 
-Havok's callback bridge frees a slot only when its owner tells it to. For the
-`static`-delegate listeners that happens through the owner-release path
-(`register_callback_owner` / `release_callback_owner`), but those pointers are
-shared and pinned for the process lifetime anyway. The pointers that actually
-accumulate are `HkPhantomCallbackShape`'s per-instance enter/leave delegates —
-and Havok only signals that a shape is gone by invoking its **delete callback**.
-
-So instead of bridging a per-instance delete callback, every phantom shape is
-handed one shared native dispatcher (`phantom_delete_dispatch`). When Havok
-destroys a shape it calls that dispatcher with the shape handle, which forwards to
-the managed delete handler and then releases the shape's enter/leave bridge slots
-for reuse. Without this, a long session that repeatedly builds and destroys
-phantom blocks (or streams grids in and out) would leak `void_ptr_ptr` slots and
-eventually exhaust the pool even with few phantoms alive at once.
+Physics records exact placeholder-to-export mappings in
+`src/Physics.exports`. Slug has 13 known exports and derives each final name by
+replacing `$` with `@`, so it does not need a manifest. CMake runs both renamers
+automatically and fails the build if the expected symbols are not found.
 
 ## Building locally
 
-Requirements: `cmake` (>= 3.10), `make`, `g++` (C++17).
+The direct CMake build requires x86-64 Linux, CMake 3.13 or newer, Python 3,
+Make, and a C++17-capable `g++`. The supplied Makefile uses CMake presets, which
+require CMake 3.21 or newer.
 
 ```bash
-make          # cmake --preset default + cmake --build --preset default
+make
 ls build/*.so
-make clean    # wipe the build/ directory
+make clean
 ```
 
-The wrappers generate sidecars such as `Havok.dll` at caller-provided cache
-paths on first load. This makes PE frames, symbols, and unwind metadata
+`make` configures `build/` with the `default` preset, builds every target, and
+does not select a CMake build type. Use a direct CMake configuration when you
+need a specific build type:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j "$(nproc)"
+ctest --test-dir build --output-on-failure
+```
+
+The default test configuration runs the SE1 generator checks, the SE2
+generator checks, and the thread attach test.
+
+## PE sidecars
+
+Loader-backed wrappers can write an ELF sidecar to the cache path supplied by
+their caller. The sidecar keeps PE frames, symbols, and unwind metadata
 available to Linux crash tools after the process exits.
 
-For saved cores or other tools that need to reopen the ELF after the process
-exits, generate a persistent copy explicitly:
+Create a persistent sidecar directly when a saved core or another tool needs
+to reopen it later:
 
 ```bash
 build/generate_pe_sidecar /path/to/Havok.dll /cache/Havok.dll
 ```
 
-The loader validates the sidecar's embedded source size and full-file FNV-1a
-fingerprint on every load. A changed DLL makes the old sidecar invalid, so it
-is atomically replaced before loading. If the DLL directory is read-only, the
-loader falls back to the raw PE loader.
+The loader checks the sidecar version, source size, and full-file FNV-1a
+fingerprint before use. It atomically replaces a stale sidecar. If the supplied
+cache path cannot provide a usable sidecar, the loader falls back to loading
+the raw PE image.
 
-To enable the Havok integration tests, point CMake at the game's native DLL
-directory. `havok_crash_test` provides both a self-checking unwind trace and an
-unhandled crash for GDB/core testing:
+## Havok integration tests
+
+Point CMake at a directory containing `Havok.dll` to add the sidecar generation
+and Havok unwind tests:
 
 ```bash
 cmake -S . -B build -DNATIVE_DLL_DIR=/path/to/SpaceEngineers/Bin64
@@ -156,27 +124,32 @@ build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll --trace
 gdb --args build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll
 ```
 
+The `--trace` form checks the unwind trace and exits normally. Running the same
+program without `--trace` leaves the crash unhandled for GDB or core testing.
+CI does not set `NATIVE_DLL_DIR`, so these DLL-backed tests are not part of the
+release workflow.
+
 ## Releases
 
-CI ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds on
-every push and publishes the libraries in two configurations, as two
-separate assets on the same release:
+The [build workflow](.github/workflows/build.yml) runs for pushes to `main` and
+for non-draft pull requests. It builds and tests Release and Debug
+configurations, then packages the shared libraries at the root of two archives:
 
-| Asset                                | Configuration        |
-| ------------------------------------ | -------------------- |
-| `linux-native-wrappers.tar.gz`       | Release (`-O3 -DNDEBUG`) |
-| `linux-native-wrappers.debug.tar.gz` | Debug (`-O0 -g`)     |
+| Asset | Configuration |
+| --- | --- |
+| `linux-native-wrappers.tar.gz` | Release (`-O3 -DNDEBUG`) |
+| `linux-native-wrappers.debug.tar.gz` | Debug (`-O0 -g`) |
 
-- **Push to `main`** → a public release tagged `v1.0.<run>` and marked *latest*.
-- **PR** → a **draft** release (not public, not *latest*,
-  no git tag until published).
-- **Draft PRs** are not built.
+A push to `main` publishes a public `v1.0.<run>` release and marks it as the
+latest release. For a non-draft pull request, the workflow maintains a draft
+release named `pr-<number>`. Draft publication requires repository write
+permission, which fork pull requests do not receive from the standard token.
 
-The build process of Pulsar for Linux and Magnetar download the
-`linux-native-wrappers.tar.gz` (Release) asset from the latest release;
-each archive contains the `.so` files at its root. The `.debug` variant
-carries unoptimized, symbol-rich builds for debugging.
+Pulsar for Linux and Magnetar consume the Release archive by asset name. The
+Debug archive retains symbols for debugging.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The project is MIT licensed; see [LICENSE](LICENSE). The bundled Linux ntsync
+UAPI header in `src/linux/ntsync.h` carries its own
+`GPL-2.0 WITH Linux-syscall-note` SPDX identifier.
