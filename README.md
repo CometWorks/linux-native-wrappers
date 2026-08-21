@@ -22,6 +22,7 @@ are provided based on Linux primitives, including optional ntsync support.
 | `libVRage.KytheraV2.Native.so` | `VRage.KytheraV2.Native.dll` compatibility shim |
 | `libVRage.Platform.Windows.Native.so` | `VRage.Platform.Windows.Native.dll` native substitute |
 | `libVRage.Slug.Native.so` | `VRage.Slug.Native.dll` (text rendering) |
+| `libVRage.Physics.Native.so` | `VRage.Physics.Native.dll` (physics) |
 
 ## Havok callback bridge thunks
 
