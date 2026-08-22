@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
 #include <pthread.h>
@@ -354,16 +355,23 @@ WINAPI BOOL SetEvent(HANDLE hEvent) {
     return TRUE;
 }
 
-WINAPI void InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection) {
-    if (!lpCriticalSection) {
-        return;
-    }
+static bool initialize_critical_section(LPCRITICAL_SECTION lpCriticalSection, DWORD spin_count) {
+    if (!lpCriticalSection)
+        return false;
     lpCriticalSection->impl = (POSIX_CRITICAL_SECTION*)malloc(sizeof(POSIX_CRITICAL_SECTION));
-    if (!lpCriticalSection->impl) {
-        return;
-    }
-    lpCriticalSection->impl->spin_count = 0;
-    pthread_mutex_init(&lpCriticalSection->impl->mutex, nullptr);
+    if (!lpCriticalSection->impl)
+        return false;
+    lpCriticalSection->impl->spin_count = spin_count;
+    pthread_mutexattr_t attributes;
+    pthread_mutexattr_init(&attributes);
+    pthread_mutexattr_settype(&attributes, PTHREAD_MUTEX_RECURSIVE);
+    int result = pthread_mutex_init(&lpCriticalSection->impl->mutex, &attributes);
+    pthread_mutexattr_destroy(&attributes);
+    return result == 0;
+}
+
+WINAPI void InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection) {
+    initialize_critical_section(lpCriticalSection, 0);
 }
 
 // InitializeCriticalSectionAndSpinCount implementation
@@ -371,22 +379,7 @@ WINAPI uint32_t InitializeCriticalSectionAndSpinCount(
     LPCRITICAL_SECTION lpCriticalSection,
     uint32_t dwSpinCount
 ) {
-    if (!lpCriticalSection) {
-        return 0;  // Failure
-    }
-
-    lpCriticalSection->impl = (POSIX_CRITICAL_SECTION*)malloc(sizeof(POSIX_CRITICAL_SECTION));
-    if (lpCriticalSection->impl == nullptr) {
-        return 0;
-    }
-
-    // Store spin count for compatibility, though not directly used in POSIX threads
-    lpCriticalSection->impl->spin_count = dwSpinCount;
-
-    // Initialize mutex with default attributes
-    int result = pthread_mutex_init(&lpCriticalSection->impl->mutex, nullptr);
-
-    return result == 0 ? 1 : 0;
+    return initialize_critical_section(lpCriticalSection, dwSpinCount) ? 1 : 0;
 }
 
 // DeleteCriticalSection implementation
@@ -503,6 +496,20 @@ WINAPI BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue) {
     return pthread_setspecific(it->second, lpTlsValue) == 0 ? TRUE : FALSE;
 }
 
+WINAPI DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION callback) {
+    // ponytail: Physics does not exercise FLS teardown; bridge callbacks if that changes.
+    (void)callback;
+    return TlsAlloc();
+}
+
+WINAPI BOOL FlsFree(DWORD index) {
+    return TlsFree(index);
+}
+
+WINAPI BOOL FlsSetValue(DWORD index, LPVOID value) {
+    return TlsSetValue(index, value);
+}
+
 WINAPI void GetSystemInfo(void *lpSystemInfo) {
     if (!lpSystemInfo) {
         return;
@@ -536,6 +543,22 @@ WINAPI BOOL GetLogicalProcessorInformation(void *buffer, DWORD *return_length) {
         infos[i].reserved[0] = 0;
         infos[i].reserved[1] = 0;
     }
+    return TRUE;
+}
+
+WINAPI BOOL GetLogicalProcessorInformationEx(INT relationship, void *buffer, DWORD *return_length) {
+    (void)relationship;
+    constexpr DWORD record_size = 8;
+    if (!return_length)
+        return FALSE;
+    if (!buffer || *return_length < record_size) {
+        *return_length = record_size;
+        return FALSE;
+    }
+    auto *record = static_cast<DWORD *>(buffer);
+    record[0] = relation_processor_core;
+    record[1] = record_size;
+    *return_length = record_size;
     return TRUE;
 }
 
@@ -799,6 +822,10 @@ WINAPI void* vcruntime_memmove(void* dest, const void* src, size_t n) {
 
 WINAPI void* vcruntime_memcpy(void* dest, const void* src, size_t n) {
     return std::memcpy(dest, src, n);
+}
+
+WINAPI void* vcruntime_memchr(const void *ptr, int value, size_t count) {
+    return const_cast<void *>(std::memchr(ptr, value, count));
 }
 
 WINAPI int vcruntime___CxxFrameHandler3(EXCEPTION_RECORD* ExceptionRecord, CONTEXT* Context,
@@ -1202,6 +1229,15 @@ WINAPI int crt___stdio_common_vsprintf(uint64_t _Options, char* _Buffer, size_t 
     return format_from_ms_va_list(_Buffer, _BufferCount, _Format, static_cast<ms_va_list>(_ArgList));
 }
 
+WINAPI int crt___stdio_common_vsnprintf_s(uint64_t options, char *buffer, size_t buffer_count,
+                                          size_t max_count, const char *format,
+                                          _locale_t locale, const void *args) {
+    (void)options;
+    (void)max_count;
+    (void)locale;
+    return format_from_ms_va_list(buffer, buffer_count, format, static_cast<ms_va_list>(args));
+}
+
 WINAPI int crt__seh_filter_dll(unsigned long _ExceptionCode, struct _EXCEPTION_POINTERS* _ExceptionPointers) {
     // DUMMY
     return 0;
@@ -1285,6 +1321,14 @@ WINAPI void crt__initterm(void (**table)(void), void (**end)(void)) {
 
 WINAPI float crt_floorf(float x) {
     return std::floor(x);
+}
+
+WINAPI float crt_roundf(float x) {
+    return std::round(x);
+}
+
+WINAPI float crt_fmodf(float x, float divisor) {
+    return std::fmod(x, divisor);
 }
 
 WINAPI float crt_cosf(float x) {
@@ -1377,7 +1421,57 @@ WINAPI void msvcr_terminate() { std::terminate(); }
 WINAPI void msvcr_type_info_dtor_internal_method(void *self) {}
 WINAPI void msvcr___clean_type_info_names_internal(void **list) {}
 WINAPI float crt_sqrt(double x) { return std::sqrt(x); }
-WINAPI void *msvcr___RTDynamicCast(void *inptr, LONG vfdelta, void *src, void *target, BOOL isReference) { return inptr; }
+WINAPI void *msvcr___RTDynamicCast(void *inptr, LONG vfdelta, void *src, void *target, BOOL isReference) {
+    if (!inptr)
+        return nullptr;
+
+    struct ObjectLocator {
+        uint32_t signature;
+        uint32_t base_class_offset;
+        uint32_t constructor_displacement;
+        uint32_t type_descriptor;
+        uint32_t type_hierarchy;
+        uint32_t self;
+    };
+    struct ClassHierarchy {
+        uint32_t signature;
+        uint32_t attributes;
+        uint32_t count;
+        uint32_t base_classes;
+    };
+    struct BaseClassDescriptor {
+        uint32_t type_descriptor;
+        uint32_t contained_bases;
+        int32_t member_offset;
+        int32_t vbtable_offset;
+        int32_t vbase_offset;
+        uint32_t attributes;
+    };
+
+    auto vtable = *reinterpret_cast<void ***>(inptr);
+    auto locator = reinterpret_cast<const ObjectLocator *>(vtable[-1]);
+    auto image_base = reinterpret_cast<const uint8_t *>(locator) - locator->self;
+    auto hierarchy = reinterpret_cast<const ClassHierarchy *>(image_base + locator->type_hierarchy);
+    auto base_classes = reinterpret_cast<const uint32_t *>(image_base + hierarchy->base_classes);
+    auto target_name = reinterpret_cast<const char *>(target) + 16;
+
+    for (uint32_t i = 0; i < hierarchy->count; ++i) {
+        auto base = reinterpret_cast<const BaseClassDescriptor *>(image_base + base_classes[i]);
+        auto type_name = reinterpret_cast<const char *>(image_base + base->type_descriptor) + 16;
+        if (std::strcmp(type_name, target_name) != 0)
+            continue;
+
+        auto result = reinterpret_cast<uint8_t *>(inptr) - locator->base_class_offset;
+        if (base->vbtable_offset >= 0) {
+            auto vbtable = *reinterpret_cast<uint8_t **>(result + base->vbtable_offset);
+            result += *reinterpret_cast<int32_t *>(vbtable + base->vbase_offset);
+        }
+        return result + base->member_offset;
+    }
+    if (isReference)
+        throw std::bad_cast();
+    return nullptr;
+}
 WINAPI void *msvcr_realloc(void *memblock, size_t size) { if (memblock) { std::lock_guard<std::mutex> lock(g_heap_mutex); g_freed_blocks.erase(memblock); } void *ptr = realloc(memblock, size + ALLOC_PADDING); heap_track_alloc(ptr); return ptr; }
 WINAPI void msvcr__aligned_free(void *memblock) { if (!heap_track_free(memblock, "msvcr__aligned_free")) free(memblock); }
 WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) { void *ptr = nullptr; if (posix_memalign(&ptr, alignment, size + ALLOC_PADDING) == 0) { heap_track_alloc(ptr); return ptr; } return nullptr; }
@@ -1865,7 +1959,7 @@ WINAPI BOOL VirtualFree(void *lpAddress, SIZE_T dwSize, DWORD dwFreeType) {
     return TRUE;
 }
 WINAPI HMODULE LoadLibraryExW(const WCHAR *lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    return reinterpret_cast<HMODULE>(1);
+    return nullptr;
 }
 WINAPI DWORD GetEnvironmentVariableA(const char *lpName, char *lpBuffer, DWORD nSize) {
     const char *val = getenv(lpName);
@@ -2058,10 +2152,14 @@ void register_windows_library_functions() {
     KERNEL32_FUNC(GetSystemTimeAsFileTime);
     KERNEL32_FUNC(GetProcAddress);
     KERNEL32_FUNC(GetLogicalProcessorInformation);
+    KERNEL32_FUNC(GetLogicalProcessorInformationEx);
     KERNEL32_FUNC(TlsGetValue);
     KERNEL32_FUNC(TlsAlloc);
     KERNEL32_FUNC(TlsFree);
     KERNEL32_FUNC(TlsSetValue);
+    KERNEL32_FUNC(FlsAlloc);
+    KERNEL32_FUNC(FlsFree);
+    KERNEL32_FUNC(FlsSetValue);
     KERNEL32_FUNC(GetSystemInfo);
     KERNEL32_FUNC(FreeLibrary);
     KERNEL32_FUNC(LoadLibraryA);
@@ -2094,6 +2192,7 @@ void register_windows_library_functions() {
 
     VCRUNTIME140_FUNC(memmove);
     VCRUNTIME140_FUNC(memcpy);
+    VCRUNTIME140_FUNC(memchr);
     VCRUNTIME140_FUNC(__CxxFrameHandler3);
     VCRUNTIME140_FUNC(__std_terminate);
     VCRUNTIME140_FUNC(_purecall);
@@ -2109,6 +2208,7 @@ void register_windows_library_functions() {
     CRT_FUNC(heap, free);
     CRT_FUNC(utility, qsort);
     CRT_FUNC(stdio, __stdio_common_vsprintf);
+    CRT_FUNC(stdio, __stdio_common_vsnprintf_s);
     CRT_FUNC(runtime, _seh_filter_dll);
     CRT_FUNC(runtime, _cexit);
     CRT_FUNC(runtime, _crt_atexit);
@@ -2120,6 +2220,8 @@ void register_windows_library_functions() {
     CRT_FUNC(runtime, _initterm_e);
     CRT_FUNC(runtime, _initterm);
     CRT_FUNC(math, floorf);
+    CRT_FUNC(math, roundf);
+    CRT_FUNC(math, fmodf);
     CRT_FUNC(math, cosf);
     CRT_FUNC(math, ceilf);
     CRT_FUNC(math, sqrtf);

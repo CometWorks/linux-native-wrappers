@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 
 
-sys.dont_write_bytecode = True
 root = Path(__file__).parent.parent
+sys.path.insert(0, str(root / "tools"))
 spec = importlib.util.spec_from_file_location(
     "generate_havok_wrapper", root / "tools/generate_havok_wrapper.py")
 generator = importlib.util.module_from_spec(spec)
@@ -57,10 +57,15 @@ cleanup = "\n".join(generator.emit_wrapper({
 assert "std::lock_guard<std::mutex> lock(g_shape_loader_return_mutex)" in cleanup
 assert "g_shape_loader_return_target.store(0" in cleanup
 
-for access in ("public", "protected", "protected internal", "internal", "private"):
-    match = generator.PINVOKE_SIGNATURE.search(
-        f"{access} static extern void Example(IntPtr value);")
-    assert match and match.group(2) == "Example"
+signatures = generator.load_signatures([{
+    "entry_point": "Example",
+    "name": "Example",
+    "ret": "void",
+    "return_i1": False,
+    "params": [{"modifier": "out", "type": "int", "name": "value"}],
+    "source": "Example.cs",
+}])
+assert signatures == [{"ret": "void", "name": "Example", "args": [("out int", "value")]}]
 
 assert generator.map_value_type("WaitPolicyT") == "int32_t"
 assert generator.map_value_type("HkUniformGridShapeArgsPOD") == "HkUniformGridShapeArgsPOD"

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 
 project(NativeWrappers VERSION 1.0.2 LANGUAGES CXX)
 
@@ -70,7 +70,65 @@ add_library(
         src/D3DCompiler.cpp
 )
 
+add_library(
+        KytheraV2
+        SHARED
+        src/KytheraV2.cpp
+)
+
+add_library(
+        PlatformWindows
+        SHARED
+        src/PlatformWindows.cpp
+)
+
+add_library(
+        Slug
+        SHARED
+        ${SOURCES}
+        src/Slug.cpp
+)
+
+add_library(
+        Physics
+        SHARED
+        ${SOURCES}
+        src/Physics.cpp
+)
+
+add_library(
+        Voxels
+        SHARED
+        ${SOURCES}
+        src/Voxels.cpp
+)
+
 set_target_properties(D3DCompiler PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(KytheraV2 PROPERTIES
+        OUTPUT_NAME "VRage.KytheraV2.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(PlatformWindows PROPERTIES
+        OUTPUT_NAME "VRage.Platform.Windows.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(Slug PROPERTIES
+        OUTPUT_NAME "VRage.Slug.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(Physics PROPERTIES
+        OUTPUT_NAME "VRage.Physics.Native"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+set_target_properties(Voxels PROPERTIES
+        OUTPUT_NAME "VRage.Voxels.Native"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
@@ -80,6 +138,20 @@ target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
+target_link_libraries(KytheraV2 PRIVATE c)
+target_link_libraries(PlatformWindows PRIVATE c)
+target_link_libraries(Slug PRIVATE c ${CMAKE_DL_LIBS})
+target_link_options(Slug PRIVATE -Wl,--hash-style=sysv)
+add_custom_command(TARGET Slug POST_BUILD
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/tools/rename_slug_exports.py" "$<TARGET_FILE:Slug>"
+)
+target_link_libraries(Physics PRIVATE c ${CMAKE_DL_LIBS})
+target_link_options(Physics PRIVATE -Wl,--hash-style=sysv)
+add_custom_command(TARGET Physics POST_BUILD
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/tools/rename_physics_exports.py"
+                "$<TARGET_FILE:Physics>" "${CMAKE_SOURCE_DIR}/src/Physics.exports"
+)
+target_link_libraries(Voxels PRIVATE c ${CMAKE_DL_LIBS})
 
 # Compiler flags
 #-Werror -Wextra
@@ -88,6 +160,17 @@ target_compile_options(RecastDetour PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(Havok PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
+target_compile_options(KytheraV2 PRIVATE -Wall -fpermissive -fPIC)
+target_compile_options(PlatformWindows PRIVATE -Wall -fpermissive -fPIC)
+# Physics and Slug export MSVC-decorated names. At -O2 and above GCC splits
+# cold paths into a separate section and appends `.cold` to the mangled symbol
+# name, producing identifiers such as
+# `??0AppliedImpulses$hknpConstraintData$$QEAA$AEBU01$$Z.cold` that the GNU
+# assembler cannot parse. Keeping the blocks together avoids the `.cold`
+# symbols entirely, so these targets build in every configuration.
+target_compile_options(Slug PRIVATE -Wall -fpermissive -fPIC -fno-reorder-blocks-and-partition)
+target_compile_options(Physics PRIVATE -Wall -fpermissive -fPIC -fno-reorder-blocks-and-partition)
+target_compile_options(Voxels PRIVATE -Wall -fpermissive -fPIC)
 
 add_executable(generate_pe_sidecar
         src/pe_sidecar.cpp
@@ -100,11 +183,13 @@ include(CTest)
 if(BUILD_TESTING)
     find_program(PYTHON3_EXECUTABLE python3)
     if(NOT PYTHON3_EXECUTABLE)
-        message(FATAL_ERROR "python3 is required for the Havok generator test")
+        message(FATAL_ERROR "python3 is required for generator tests")
     endif()
 
-    add_test(NAME havok_generator
-            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/havok_generator.py)
+    add_test(NAME se1_generators
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se1_generators.py)
+    add_test(NAME se2_generators
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se2_generators.py)
 
     add_executable(thread_id_dll_attach_test
             ${SOURCES}
