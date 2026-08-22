@@ -177,6 +177,11 @@ add_executable(generate_pe_sidecar
         tools/generate_pe_sidecar.cpp)
 target_compile_options(generate_pe_sidecar PRIVATE -Wall)
 
+add_executable(d3dcompiler_tool
+        tools/d3dcompiler_tool.cpp)
+target_link_libraries(d3dcompiler_tool PRIVATE D3DCompiler)
+target_compile_options(d3dcompiler_tool PRIVATE -Wall)
+
 set(NATIVE_DLL_DIR "" CACHE PATH "Directory containing the Windows native DLLs")
 
 include(CTest)
@@ -200,6 +205,15 @@ if(BUILD_TESTING)
     target_compile_options(thread_id_dll_attach_test PRIVATE -Wall -fpermissive)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
+
+    if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
+        add_test(NAME d3dcompiler_preprocess
+                COMMAND ${PYTHON3_EXECUTABLE}
+                        ${CMAKE_SOURCE_DIR}/tests/d3dcompiler_preprocess.py
+                        "$<TARGET_FILE:d3dcompiler_tool>"
+                        "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
+        set_tests_properties(d3dcompiler_preprocess PROPERTIES TIMEOUT 60)
+    endif()
 
     if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/Havok.dll")
         add_test(NAME pe_sidecar_generation
