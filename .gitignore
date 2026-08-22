@@ -1,9 +1,13 @@
-# CMake out-of-tree build directory (produced by `make`).
+# CMake out-of-tree build directories (produced by `make` and by the
+# per-configuration builds in the build workflow).
 /build/
 /build-release/
+/build-debug/
 
-# Local packaging output.
+# Local packaging output (produced by ./build_and_package.sh) and the
+# workflow's per-game staging trees.
 /out/
+/out-*/
 /dist/
 
 # Python bytecode caches.

@@ -162,8 +162,14 @@ target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(D3DCompiler PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(KytheraV2 PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(PlatformWindows PRIVATE -Wall -fpermissive -fPIC)
-target_compile_options(Slug PRIVATE -Wall -fpermissive -fPIC)
-target_compile_options(Physics PRIVATE -Wall -fpermissive -fPIC)
+# Physics and Slug export MSVC-decorated names. At -O2 and above GCC splits
+# cold paths into a separate section and appends `.cold` to the mangled symbol
+# name, producing identifiers such as
+# `??0AppliedImpulses$hknpConstraintData$$QEAA$AEBU01$$Z.cold` that the GNU
+# assembler cannot parse. Keeping the blocks together avoids the `.cold`
+# symbols entirely, so these targets build in every configuration.
+target_compile_options(Slug PRIVATE -Wall -fpermissive -fPIC -fno-reorder-blocks-and-partition)
+target_compile_options(Physics PRIVATE -Wall -fpermissive -fPIC -fno-reorder-blocks-and-partition)
 target_compile_options(Voxels PRIVATE -Wall -fpermissive -fPIC)
 
 add_executable(generate_pe_sidecar

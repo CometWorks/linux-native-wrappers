@@ -1,12 +1,12 @@
 name: Build
 
-# Builds the Linux native wrapper shared libraries and publishes them as a
-# tar.gz release asset. These PE-loader shims let the original Windows
+# Builds the Linux native wrapper shared libraries and publishes them as
+# tar.gz release assets. These PE-loader shims let the original Windows
 # Space Engineers native DLLs run on Linux; both Pulsar for Linux and Magnetar
-# consume the resulting archive.
+# consume the resulting archives.
 #
 #   * push to main        -> build, then publish a PUBLIC release tagged
-#                            v1.0.<run_number> and marked "latest". Both
+#                            v1.0.<run_number> and marked "latest". All four
 #                            tar.gz assets are attached.
 #   * push to a (non-draft)
 #     pull request         -> build, then publish a DRAFT release (not public,
@@ -14,14 +14,20 @@ name: Build
 #                            maintainer publishes it). Same assets otherwise.
 #   * draft pull requests  -> skipped entirely (no build, no release).
 #
-# Two configurations are built and published as separate assets:
+# Building, testing and packaging are done by ./build_and_package.sh, the same
+# script used for local builds, so a locally produced archive matches the
+# published one. It builds and tests the Release and Debug configurations and
+# writes four archives under dist/ — one per game and configuration:
 #
-#   * Release (-O3 -DNDEBUG) -> linux-native-wrappers.tar.gz       (primary)
-#   * Debug   (-O0 -g)       -> linux-native-wrappers.debug.tar.gz
+#   * Release (-O3 -DNDEBUG) -> se1-native-wrappers.tar.gz         (primary)
+#                               se2-native-wrappers.tar.gz         (primary)
+#   * Debug   (-O0 -g)       -> se1-native-wrappers.debug.tar.gz
+#                               se2-native-wrappers.debug.tar.gz
 #
-# Both are attached to the same release; consumers (Pulsar for Linux, Magnetar)
-# pull the release asset by name, so the Release archive keeps the historical
-# filename and the Debug archive gets the `.debug` variant name.
+# The wrappers are split per game, so a consumer only downloads the libraries
+# its own game version loads. All four are attached to the same release;
+# consumers pull the release asset by name. This layout replaced the single
+# combined linux-native-wrappers archive, which is no longer published.
 #
 # The build toolchain (ubuntu 24.04 + build-essential/cmake/make/g++) is
 # identical to the Docker-based build that Magnetar currently uses, so the
@@ -53,47 +59,17 @@ jobs:
             build-essential cmake make g++
 
       - name: Build and package native wrappers (Release + Debug)
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          # Build and package every wrapper.
-          libs="libD3DCompiler.so libHavok.so libRecastDetour.so libVRageNative.so libVRage.KytheraV2.Native.so libVRage.Platform.Windows.Native.so libVRage.Slug.Native.so libVRage.Physics.Native.so libVRage.Voxels.Native.so"
-          # Build each configuration into its own tree and archive the
-          # .so files at the root of a tarball. Release keeps the historical
-          # asset name; Debug gets the `.debug` variant name.
-          build_config() {
-            local build_type="$1" archive="$2"
-            local build_dir="build-${build_type,,}"
-            echo "::group::Build ${build_type}"
-            cmake -S . -B "$build_dir" -G "Unix Makefiles" \
-              -DCMAKE_BUILD_TYPE="$build_type"
-            cmake --build "$build_dir" -j "$(nproc)"
-            ctest --test-dir "$build_dir" --output-on-failure
-            echo "::endgroup::"
-            local out="out-${build_type,,}"
-            mkdir -p "$out"
-            for lib in $libs; do
-              if [ ! -f "$build_dir/$lib" ]; then
-                echo "ERROR: expected build output $build_dir/$lib is missing." >&2
-                exit 1
-              fi
-              install -m 0755 "$build_dir/$lib" "$out/$lib"
-            done
-            tar -czf "dist/$archive" -C "$out" $libs
-            echo "Packaged $archive (${build_type}):"
-            tar -tzf "dist/$archive"
-            ls -l "$out"/*.so
-          }
-          build_config Release linux-native-wrappers.tar.gz
-          build_config Debug   linux-native-wrappers.debug.tar.gz
+        run: ./build_and_package.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: linux-native-wrappers
           path: |
-            dist/linux-native-wrappers.tar.gz
-            dist/linux-native-wrappers.debug.tar.gz
+            dist/se1-native-wrappers.tar.gz
+            dist/se2-native-wrappers.tar.gz
+            dist/se1-native-wrappers.debug.tar.gz
+            dist/se2-native-wrappers.debug.tar.gz
           if-no-files-found: error
 
       - name: Publish release
@@ -102,8 +78,10 @@ jobs:
         run: |
           set -euo pipefail
           assets=(
-            "dist/linux-native-wrappers.tar.gz"
-            "dist/linux-native-wrappers.debug.tar.gz"
+            "dist/se1-native-wrappers.tar.gz"
+            "dist/se2-native-wrappers.tar.gz"
+            "dist/se1-native-wrappers.debug.tar.gz"
+            "dist/se2-native-wrappers.debug.tar.gz"
           )
 
           if [ "${{ github.event_name }}" = "push" ]; then
