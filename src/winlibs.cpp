@@ -1,15 +1,21 @@
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <condition_variable>
 #include <cerrno>
 #include <clocale>
 #include <cstdarg>
 #include <cctype>
 #include <filesystem>
+#include <limits>
+#include <map>
 #include <mutex>
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
 #include <pthread.h>
+#include <sched.h>
 #include <semaphore.h>
 #include <unistd.h>
 #include <csignal>
@@ -79,6 +85,8 @@ struct thread_start_info {
     thread_handle_data *thread_data;
 };
 
+static thread_local thread_start_info *g_current_thread_info;
+
 struct system_info_stub {
     DWORD processor_architecture;
     DWORD page_size;
@@ -92,47 +100,125 @@ struct system_info_stub {
     WORD processor_revision;
 };
 
-struct logical_processor_info_stub {
-    ULONG_PTR processor_mask;
-    DWORD relationship;
-    DWORD flags;
-    DWORD reserved[2];
+struct processor_topology {
+    DWORD logical_count;
+    ULONG_PTR active_mask;
+    std::vector<ULONG_PTR> core_masks;
 };
-
-constexpr DWORD relation_processor_core = 0;
-constexpr DWORD havok_reported_logical_processors = 16;
-constexpr DWORD havok_reported_core_count = 16;
 
 static std::mutex g_tls_mutex;
 static DWORD g_next_tls_index = 1;
 static std::unordered_map<DWORD, pthread_key_t> g_tls_keys;
-static std::mutex g_heap_mutex;
-static std::unordered_set<void *> g_freed_blocks;
-
-static void heap_track_alloc(void *ptr)
-{
-    if (!ptr) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_heap_mutex);
-    g_freed_blocks.erase(ptr);
-}
-
-static bool heap_track_free(void *ptr, const char *label)
-{
-    if (!ptr) {
-        return false;
-    }
-    std::lock_guard<std::mutex> lock(g_heap_mutex);
-    if (g_freed_blocks.find(ptr) != g_freed_blocks.end()) {
-        fprintf(stderr, "%s duplicate free suppressed for %p\n", label, ptr);
-        return true;
-    }
-    g_freed_blocks.insert(ptr);
-    return false;
-}
+static thread_local DWORD g_last_error;
+static constexpr DWORD ERROR_INSUFFICIENT_BUFFER = 122;
+static constexpr size_t MAX_FLS_SLOTS = 1024;
+struct fls_slot {
+    PFLS_CALLBACK_FUNCTION callback;
+    uint64_t generation;
+    bool allocated;
+};
+struct fls_thread_state {
+    std::array<void *, MAX_FLS_SLOTS> values{};
+    std::array<uint64_t, MAX_FLS_SLOTS> generations{};
+};
+static std::mutex g_fls_mutex;
+static std::array<fls_slot, MAX_FLS_SLOTS> g_fls_slots{};
+static std::vector<fls_thread_state *> g_fls_threads;
+static pthread_key_t g_fls_key;
+static pthread_once_t g_fls_key_once = PTHREAD_ONCE_INIT;
+static std::recursive_mutex g_onexit_mutex;
+static std::condition_variable_any g_onexit_condition;
+static std::unordered_set<_onexit_table_t *> g_executing_onexit_tables;
+static thread_local _onexit_table_t *g_executing_onexit_table;
+static _onexit_table_t g_process_onexit{};
+static std::mutex g_virtual_memory_mutex;
+static std::map<uintptr_t, size_t> g_virtual_reservations;
 static std::once_flag g_ntsync_init_once;
 static int g_ntsync_fd = -1;
+
+static constexpr DWORD ERROR_NOT_ENOUGH_MEMORY = 8;
+static constexpr DWORD ERROR_INVALID_PARAMETER = 87;
+static constexpr DWORD ERROR_INVALID_ADDRESS = 487;
+static constexpr DWORD MEM_COMMIT = 0x1000;
+static constexpr DWORD MEM_RESERVE = 0x2000;
+static constexpr DWORD MEM_DECOMMIT = 0x4000;
+static constexpr DWORD MEM_RELEASE = 0x8000;
+static constexpr DWORD PAGE_NOACCESS = 0x01;
+static constexpr DWORD PAGE_READONLY = 0x02;
+static constexpr DWORD PAGE_READWRITE = 0x04;
+static constexpr DWORD PAGE_EXECUTE = 0x10;
+static constexpr DWORD PAGE_EXECUTE_READ = 0x20;
+static constexpr DWORD PAGE_EXECUTE_READWRITE = 0x40;
+static constexpr size_t WINDOWS_ALLOCATION_GRANULARITY = 65536;
+
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
+
+static size_t host_page_size()
+{
+    static const size_t value = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    return value;
+}
+
+static bool checked_add_size(size_t left, size_t right, size_t &result)
+{
+    if (right > std::numeric_limits<size_t>::max() - left)
+        return false;
+    result = left + right;
+    return true;
+}
+
+static bool checked_add_address(uintptr_t address, size_t size, uintptr_t &result)
+{
+    if (size > std::numeric_limits<uintptr_t>::max() - address)
+        return false;
+    result = address + size;
+    return true;
+}
+
+static bool round_up_size(size_t value, size_t alignment, size_t &result)
+{
+    size_t adjusted;
+    if (!checked_add_size(value, alignment - 1, adjusted))
+        return false;
+    result = adjusted & ~(alignment - 1);
+    return true;
+}
+
+static bool round_up_address(uintptr_t value, size_t alignment, uintptr_t &result)
+{
+    uintptr_t adjusted;
+    if (!checked_add_address(value, alignment - 1, adjusted))
+        return false;
+    result = adjusted & ~(static_cast<uintptr_t>(alignment) - 1);
+    return true;
+}
+
+static bool windows_protection(DWORD protection, int &native)
+{
+    switch (protection) {
+    case PAGE_NOACCESS: native = PROT_NONE; return true;
+    case PAGE_READONLY: native = PROT_READ; return true;
+    case PAGE_READWRITE: native = PROT_READ | PROT_WRITE; return true;
+    case PAGE_EXECUTE: native = PROT_EXEC; return true;
+    case PAGE_EXECUTE_READ: native = PROT_EXEC | PROT_READ; return true;
+    case PAGE_EXECUTE_READWRITE: native = PROT_EXEC | PROT_READ | PROT_WRITE; return true;
+    default: return false;
+    }
+}
+
+static auto find_reservation(uintptr_t start, uintptr_t end)
+{
+    auto it = g_virtual_reservations.upper_bound(start);
+    if (it == g_virtual_reservations.begin())
+        return g_virtual_reservations.end();
+    --it;
+    uintptr_t reservation_end;
+    return checked_add_address(it->first, it->second, reservation_end) &&
+           start >= it->first && end <= reservation_end
+        ? it : g_virtual_reservations.end();
+}
 
 static void init_ntsync()
 {
@@ -184,19 +270,64 @@ static std::wstring wide_to_string(LPCWSTR value) {
     return out;
 }
 
-static void *thread_entry(void *arg) {
-    auto *info = static_cast<thread_start_info *>(arg);
-    auto *thread = info->thread_data;
-    pthread_mutex_lock(&thread->mutex);
-    thread->thread_id = static_cast<DWORD>(syscall(SYS_gettid));
-    pthread_cond_broadcast(&thread->condition);
-    pthread_mutex_unlock(&thread->mutex);
-    if (!setup_nt_threadinfo(nullptr)) {
-        fprintf(stderr, "thread_entry: setup_nt_threadinfo failed\n");
-        std::abort();
+static int cpu_topology_value(int cpu, const char *name)
+{
+    char path[128];
+    std::snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/topology/%s", cpu, name);
+    FILE *file = std::fopen(path, "r");
+    int value = -1;
+    if (file) {
+        if (std::fscanf(file, "%d", &value) != 1)
+            value = -1;
+        std::fclose(file);
     }
-    pe_notify_loaded_images(DLL_THREAD_ATTACH);
-    DWORD result = info->start_routine ? info->start_routine(info->parameter) : 0;
+    return value;
+}
+
+static const processor_topology &host_processor_topology()
+{
+    static const processor_topology topology = [] {
+        std::vector<int> cpus;
+        cpu_set_t allowed;
+        CPU_ZERO(&allowed);
+        if (sched_getaffinity(0, sizeof(allowed), &allowed) == 0)
+            for (int cpu = 0; cpu < CPU_SETSIZE && cpus.size() < sizeof(ULONG_PTR) * CHAR_BIT; ++cpu)
+                if (CPU_ISSET(cpu, &allowed))
+                    cpus.push_back(cpu);
+
+        if (cpus.empty()) {
+            long count = std::max(1L, sysconf(_SC_NPROCESSORS_ONLN));
+            for (int cpu = 0; cpu < count && cpus.size() < sizeof(ULONG_PTR) * CHAR_BIT; ++cpu)
+                cpus.push_back(cpu);
+        }
+
+        std::map<std::pair<int, int>, ULONG_PTR> cores;
+        for (size_t bit = 0; bit < cpus.size(); ++bit) {
+            int package = cpu_topology_value(cpus[bit], "physical_package_id");
+            int core = cpu_topology_value(cpus[bit], "core_id");
+            if (package < 0 || core < 0) {
+                package = 0;
+                core = cpus[bit];
+            }
+            cores[{package, core}] |= static_cast<ULONG_PTR>(1) << bit;
+        }
+
+        processor_topology result{};
+        result.logical_count = static_cast<DWORD>(cpus.size());
+        result.active_mask = cpus.size() == sizeof(ULONG_PTR) * CHAR_BIT
+            ? ~static_cast<ULONG_PTR>(0)
+            : (static_cast<ULONG_PTR>(1) << cpus.size()) - 1;
+        for (const auto &core : cores)
+            result.core_masks.push_back(core.second);
+        return result;
+    }();
+    return topology;
+}
+
+static void finish_thread(thread_start_info *info, DWORD result)
+{
+    auto *thread = info->thread_data;
+    pe_cleanup_current_thread();
     bool destroy_thread = false;
     pthread_mutex_lock(&thread->mutex);
     thread->exit_code = result;
@@ -210,7 +341,36 @@ static void *thread_entry(void *arg) {
         delete thread;
     }
     delete info;
+}
+
+static void *thread_entry(void *arg) {
+    auto *info = static_cast<thread_start_info *>(arg);
+    auto *thread = info->thread_data;
+    g_current_thread_info = info;
+    pthread_mutex_lock(&thread->mutex);
+    thread->thread_id = static_cast<DWORD>(syscall(SYS_gettid));
+    pthread_cond_broadcast(&thread->condition);
+    pthread_mutex_unlock(&thread->mutex);
+    if (!setup_nt_threadinfo(nullptr)) {
+        fprintf(stderr, "thread_entry: setup_nt_threadinfo failed\n");
+        std::abort();
+    }
+    pe_notify_loaded_images(DLL_THREAD_ATTACH);
+    DWORD result = info->start_routine ? info->start_routine(info->parameter) : 0;
+    g_current_thread_info = nullptr;
+    finish_thread(info, result);
     return nullptr;
+}
+
+WINAPI void crt_endthreadex(unsigned result)
+{
+    auto *info = g_current_thread_info;
+    g_current_thread_info = nullptr;
+    if (info)
+        finish_thread(info, result);
+    else
+        pe_cleanup_current_thread();
+    pthread_exit(nullptr);
 }
 
 WINAPI BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount)
@@ -218,9 +378,10 @@ WINAPI BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount)
     if (!lpPerformanceCount)
         return FALSE;
 
-    auto now = std::chrono::high_resolution_clock::now();
-    auto count = now.time_since_epoch().count();
-    *lpPerformanceCount = count;
+    timespec now{};
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        return FALSE;
+    *lpPerformanceCount = static_cast<LARGE_INTEGER>(now.tv_sec) * 1000000000LL + now.tv_nsec;
     return TRUE;
 }
 
@@ -229,8 +390,7 @@ WINAPI BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency)
     if (!lpFrequency)
         return FALSE;
 
-    auto frequency = std::chrono::high_resolution_clock::period::den;
-    *lpFrequency = frequency;
+    *lpFrequency = 1000000000LL;
     return TRUE;
 }
 
@@ -496,18 +656,138 @@ WINAPI BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue) {
     return pthread_setspecific(it->second, lpTlsValue) == 0 ? TRUE : FALSE;
 }
 
+static void destroy_fls_state(void *value);
+
+static void make_fls_key()
+{
+    pthread_key_create(&g_fls_key, destroy_fls_state);
+}
+
+static fls_thread_state *get_fls_state()
+{
+    pthread_once(&g_fls_key_once, make_fls_key);
+    auto *state = static_cast<fls_thread_state *>(pthread_getspecific(g_fls_key));
+    if (state)
+        return state;
+    state = new (std::nothrow) fls_thread_state;
+    if (!state)
+        return nullptr;
+    if (pthread_setspecific(g_fls_key, state) != 0) {
+        delete state;
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_fls_mutex);
+    g_fls_threads.push_back(state);
+    return state;
+}
+
+void winlibs_cleanup_fls_for_current_thread()
+{
+    pthread_once(&g_fls_key_once, make_fls_key);
+    auto *state = static_cast<fls_thread_state *>(pthread_getspecific(g_fls_key));
+    if (!state)
+        return;
+
+    for (int pass = 0; pass < PTHREAD_DESTRUCTOR_ITERATIONS; ++pass) {
+        std::vector<std::pair<PFLS_CALLBACK_FUNCTION, void *>> callbacks;
+        {
+            std::lock_guard<std::mutex> lock(g_fls_mutex);
+            for (size_t i = 0; i < MAX_FLS_SLOTS; ++i) {
+                auto &slot = g_fls_slots[i];
+                if (!state->values[i] || !slot.allocated ||
+                    state->generations[i] != slot.generation)
+                    continue;
+                if (slot.callback)
+                    callbacks.emplace_back(slot.callback, state->values[i]);
+                state->values[i] = nullptr;
+            }
+        }
+        if (callbacks.empty())
+            break;
+        for (const auto &callback : callbacks)
+            callback.first(callback.second);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_fls_mutex);
+        g_fls_threads.erase(std::remove(g_fls_threads.begin(), g_fls_threads.end(), state),
+                            g_fls_threads.end());
+    }
+    pthread_setspecific(g_fls_key, nullptr);
+    delete state;
+}
+
+static void destroy_fls_state(void *value)
+{
+    if (!value)
+        return;
+    pthread_setspecific(g_fls_key, value);
+    winlibs_cleanup_fls_for_current_thread();
+}
+
 WINAPI DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION callback) {
-    // ponytail: Physics does not exercise FLS teardown; bridge callbacks if that changes.
-    (void)callback;
-    return TlsAlloc();
+    std::lock_guard<std::mutex> lock(g_fls_mutex);
+    for (DWORD i = 0; i < MAX_FLS_SLOTS; ++i) {
+        auto &slot = g_fls_slots[i];
+        if (slot.allocated)
+            continue;
+        slot.allocated = true;
+        slot.callback = callback;
+        ++slot.generation;
+        return i;
+    }
+    return 0xffffffffu;
 }
 
 WINAPI BOOL FlsFree(DWORD index) {
-    return TlsFree(index);
+    if (index >= MAX_FLS_SLOTS)
+        return FALSE;
+    std::vector<std::pair<PFLS_CALLBACK_FUNCTION, void *>> callbacks;
+    {
+        std::lock_guard<std::mutex> lock(g_fls_mutex);
+        auto &slot = g_fls_slots[index];
+        if (!slot.allocated)
+            return FALSE;
+        for (auto *state : g_fls_threads) {
+            if (!state->values[index] || state->generations[index] != slot.generation)
+                continue;
+            if (slot.callback)
+                callbacks.emplace_back(slot.callback, state->values[index]);
+            state->values[index] = nullptr;
+        }
+        slot.allocated = false;
+        slot.callback = nullptr;
+    }
+    for (const auto &callback : callbacks)
+        callback.first(callback.second);
+    return TRUE;
 }
 
 WINAPI BOOL FlsSetValue(DWORD index, LPVOID value) {
-    return TlsSetValue(index, value);
+    if (index >= MAX_FLS_SLOTS)
+        return FALSE;
+    auto *state = get_fls_state();
+    if (!state)
+        return FALSE;
+    std::lock_guard<std::mutex> lock(g_fls_mutex);
+    auto &slot = g_fls_slots[index];
+    if (!slot.allocated)
+        return FALSE;
+    state->values[index] = value;
+    state->generations[index] = slot.generation;
+    return TRUE;
+}
+
+WINAPI LPVOID FlsGetValue(DWORD index) {
+    if (index >= MAX_FLS_SLOTS)
+        return nullptr;
+    auto *state = get_fls_state();
+    if (!state)
+        return nullptr;
+    std::lock_guard<std::mutex> lock(g_fls_mutex);
+    auto &slot = g_fls_slots[index];
+    return slot.allocated && state->generations[index] == slot.generation
+        ? state->values[index] : nullptr;
 }
 
 WINAPI void GetSystemInfo(void *lpSystemInfo) {
@@ -517,48 +797,68 @@ WINAPI void GetSystemInfo(void *lpSystemInfo) {
     auto *info = static_cast<system_info_stub *>(lpSystemInfo);
     std::memset(info, 0, sizeof(*info));
     info->page_size = static_cast<DWORD>(sysconf(_SC_PAGESIZE));
-    info->number_of_processors = havok_reported_logical_processors;
+    const auto &topology = host_processor_topology();
+    info->number_of_processors = topology.logical_count;
     info->allocation_granularity = 65536;
-    if (havok_reported_logical_processors >= sizeof(ULONG_PTR) * CHAR_BIT) {
-        info->active_processor_mask = ~static_cast<ULONG_PTR>(0);
-    } else {
-        info->active_processor_mask = (static_cast<ULONG_PTR>(1) << havok_reported_logical_processors) - 1;
-    }
+    info->active_processor_mask = topology.active_mask;
 }
 
 WINAPI BOOL GetLogicalProcessorInformation(void *buffer, DWORD *return_length) {
-    DWORD required = havok_reported_core_count * sizeof(logical_processor_info_stub);
-    if (return_length) {
-        *return_length = required;
+    if (!return_length) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return FALSE;
     }
-    if (!buffer) {
+    const auto &topology = host_processor_topology();
+    DWORD supplied = *return_length;
+    DWORD required = static_cast<DWORD>(topology.core_masks.size() *
+                                         sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
+    *return_length = required;
+    if (!buffer || supplied < required) {
+        g_last_error = ERROR_INSUFFICIENT_BUFFER;
         return FALSE;
     }
 
-    auto *infos = static_cast<logical_processor_info_stub *>(buffer);
-    for (DWORD i = 0; i < havok_reported_core_count; ++i) {
-        infos[i].processor_mask = static_cast<ULONG_PTR>(1) << i;
-        infos[i].relationship = relation_processor_core;
-        infos[i].flags = 1;
-        infos[i].reserved[0] = 0;
-        infos[i].reserved[1] = 0;
+    auto *infos = static_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION *>(buffer);
+    for (size_t i = 0; i < topology.core_masks.size(); ++i) {
+        infos[i] = {};
+        infos[i].ProcessorMask = topology.core_masks[i];
+        infos[i].Relationship = RelationProcessorCore;
+        infos[i].DUMMYUNIONNAME.ProcessorCore.Flags =
+            __builtin_popcountl(topology.core_masks[i]) > 1 ? LTP_PC_SMT : 0;
     }
     return TRUE;
 }
 
 WINAPI BOOL GetLogicalProcessorInformationEx(INT relationship, void *buffer, DWORD *return_length) {
-    (void)relationship;
-    constexpr DWORD record_size = 8;
-    if (!return_length)
-        return FALSE;
-    if (!buffer || *return_length < record_size) {
-        *return_length = record_size;
+    if (!return_length) {
+        g_last_error = ERROR_INVALID_PARAMETER;
         return FALSE;
     }
-    auto *record = static_cast<DWORD *>(buffer);
-    record[0] = relation_processor_core;
-    record[1] = record_size;
-    *return_length = record_size;
+    if (relationship != RelationProcessorCore) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return FALSE;
+    }
+
+    const auto &topology = host_processor_topology();
+    DWORD supplied = *return_length;
+    DWORD required = static_cast<DWORD>(topology.core_masks.size() *
+                                         sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX));
+    *return_length = required;
+    if (!buffer || supplied < required) {
+        g_last_error = ERROR_INSUFFICIENT_BUFFER;
+        return FALSE;
+    }
+
+    auto *records = static_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buffer);
+    for (size_t i = 0; i < topology.core_masks.size(); ++i) {
+        records[i] = {};
+        records[i].Relationship = RelationProcessorCore;
+        records[i].Size = sizeof(records[i]);
+        records[i].DUMMYUNIONNAME.Processor.Flags =
+            __builtin_popcountl(topology.core_masks[i]) > 1 ? LTP_PC_SMT : 0;
+        records[i].DUMMYUNIONNAME.Processor.GroupCount = 1;
+        records[i].DUMMYUNIONNAME.Processor.GroupMask[0].Mask = topology.core_masks[i];
+    }
     return TRUE;
 }
 
@@ -788,8 +1088,29 @@ WINAPI PSLIST_HEADER InitializeSListHead(PSLIST_HEADER ListHead) {
 }
 
 WINAPI BOOL DisableThreadLibraryCalls(HMODULE hModule) {
-    // DUMMY
-    return TRUE;
+    if (pe_disable_thread_library_calls(hModule))
+        return TRUE;
+    g_last_error = ERROR_INVALID_PARAMETER;
+    return FALSE;
+}
+
+[[noreturn]] static void unsupported_msvc_exception(const char *symbol, DWORD code = 0)
+{
+    std::fprintf(stderr, "%s: unsupported MSVC exception boundary (code 0x%08x, caller %p)\n",
+                 symbol, code, __builtin_return_address(0));
+    std::abort();
+}
+
+WINAPI void RaiseException(DWORD code, DWORD flags, DWORD argument_count,
+                           const ULONG_PTR *arguments)
+{
+    (void)flags;
+    (void)argument_count;
+    (void)arguments;
+    // MSVC uses this debugger-only exception to assign a thread name.
+    if (code == 0x406d1388)
+        return;
+    unsupported_msvc_exception("RaiseException", code);
 }
 
 // Windows FILETIME is 100-nanosecond intervals since January 1, 1601
@@ -828,10 +1149,22 @@ WINAPI void* vcruntime_memchr(const void *ptr, int value, size_t count) {
     return const_cast<void *>(std::memchr(ptr, value, count));
 }
 
-WINAPI int vcruntime___CxxFrameHandler3(EXCEPTION_RECORD* ExceptionRecord, CONTEXT* Context,
-                       void* DispatcherContext, void* HandlerContext) {
-    // DUMMY
-    return 0;
+WINAPI EXCEPTION_DISPOSITION vcruntime___CxxFrameHandler3(
+    EXCEPTION_RECORD *record, void *establisher_frame, CONTEXT *context,
+    DISPATCHER_CONTEXT *dispatcher) {
+    (void)establisher_frame;
+    (void)context;
+    (void)dispatcher;
+    unsupported_msvc_exception("__CxxFrameHandler3", record ? record->ExceptionCode : 0);
+}
+
+WINAPI EXCEPTION_DISPOSITION vcruntime___CxxFrameHandler4(
+    EXCEPTION_RECORD *record, void *establisher_frame, CONTEXT *context,
+    DISPATCHER_CONTEXT *dispatcher) {
+    (void)establisher_frame;
+    (void)context;
+    (void)dispatcher;
+    unsupported_msvc_exception("__CxxFrameHandler4", record ? record->ExceptionCode : 0);
 }
 
 WINAPI void vcruntime___std_terminate() {
@@ -842,10 +1175,14 @@ WINAPI void vcruntime__purecall() {
     std::terminate();
 }
 
-WINAPI int vcruntime___C_specific_handler(EXCEPTION_RECORD* ExceptionRecord, void* EstablisherFrame,
-                         CONTEXT* ContextRecord, DISPATCHER_CONTEXT* DispatcherContext) {
-    // DUMMY
-    return 0;
+WINAPI EXCEPTION_DISPOSITION vcruntime___C_specific_handler(
+    EXCEPTION_RECORD* ExceptionRecord, void* EstablisherFrame,
+    CONTEXT* ContextRecord, DISPATCHER_CONTEXT* DispatcherContext) {
+    (void)EstablisherFrame;
+    (void)ContextRecord;
+    (void)DispatcherContext;
+    unsupported_msvc_exception("__C_specific_handler",
+                               ExceptionRecord ? ExceptionRecord->ExceptionCode : 0);
 }
 
 WINAPI void* vcruntime_memset(void* dest, int val, size_t n) {
@@ -865,21 +1202,33 @@ WINAPI void vcruntime___std_type_info_destroy_list(void** list) {
 }
 
 WINAPI void vcruntime__CxxThrowException(void* pExceptionObject, void* pThrowInfo) {
-    throw pExceptionObject;
+    (void)pExceptionObject;
+    (void)pThrowInfo;
+    unsupported_msvc_exception("_CxxThrowException", 0xe06d7363);
+}
+
+WINAPI void *vcruntime___current_exception() {
+    unsupported_msvc_exception("__current_exception");
+}
+
+WINAPI void *vcruntime___current_exception_context() {
+    unsupported_msvc_exception("__current_exception_context");
 }
 
 // CRT
 
-// MSVC allocator rounds up to 16 bytes and adds its own metadata padding.
-// PE code compiled with MSVC may write slightly past the requested size
-// (within MSVC's padding) which corrupts glibc's heap metadata.
-// Adding padding prevents this corruption.
-static constexpr size_t ALLOC_PADDING = 256;
+static bool checked_mul_size(size_t left, size_t right, size_t &result)
+{
+    if (left && right > std::numeric_limits<size_t>::max() / left) {
+        errno = ENOMEM;
+        return false;
+    }
+    result = left * right;
+    return true;
+}
 
 WINAPI void *crt_malloc(size_t size) {
-    void *ptr = malloc(size + ALLOC_PADDING);
-    heap_track_alloc(ptr);
-    return ptr;
+    return malloc(size);
 }
 
 WINAPI int crt__callnewh(size_t size) {
@@ -887,10 +1236,7 @@ WINAPI int crt__callnewh(size_t size) {
 }
 
 WINAPI void crt_free(void *ptr) {
-    // fprintf(stderr, "crt_free(%p)\n", ptr);
-    if (!heap_track_free(ptr, "crt_free")) {
-        free(ptr);
-    }
+    free(ptr);
 }
 
 using pe_qsort_compare_t = int (WINAPI *)(const void*, const void*);
@@ -1243,26 +1589,87 @@ WINAPI int crt__seh_filter_dll(unsigned long _ExceptionCode, struct _EXCEPTION_P
     return 0;
 }
 
+WINAPI int crt__execute_onexit_table(void *table);
+WINAPI int crt__register_onexit_function(void *table, void *func);
+
 WINAPI void crt__cexit() {
-    // DUMMY
+    crt__execute_onexit_table(&g_process_onexit);
 }
 
-WINAPI int crt__crt_atexit(void (*func)(void)) {
-    return std::atexit(func);
+WINAPI int crt__crt_atexit(_PVFV func) {
+    return crt__register_onexit_function(&g_process_onexit,
+                                          reinterpret_cast<void *>(func));
 }
 
-WINAPI int crt__execute_onexit_table(void* table) {
-    // DUMMY
+WINAPI int crt__execute_onexit_table(void* raw_table) {
+    if (!raw_table)
+        return -1;
+    auto *table = static_cast<_onexit_table_t *>(raw_table);
+    {
+        std::unique_lock<std::recursive_mutex> lock(g_onexit_mutex);
+        if (g_executing_onexit_table == table)
+            return 0;
+        g_onexit_condition.wait(lock, [table] {
+            return g_executing_onexit_tables.count(table) == 0;
+        });
+        g_executing_onexit_tables.insert(table);
+    }
+    auto *previous_table = g_executing_onexit_table;
+    g_executing_onexit_table = table;
+    for (;;) {
+        _PVFV callback = nullptr;
+        {
+            std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+            if (table->_first && table->_last > table->_first)
+                callback = *--table->_last;
+            else {
+                std::free(table->_first);
+                *table = {};
+                break;
+            }
+        }
+        if (callback)
+            callback();
+    }
+    g_executing_onexit_table = previous_table;
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+        g_executing_onexit_tables.erase(table);
+    }
+    g_onexit_condition.notify_all();
     return 0;
 }
 
-WINAPI int crt__register_onexit_function(void* table, void* func) {
-    // DUMMY
+WINAPI int crt__register_onexit_function(void* raw_table, void* raw_func) {
+    if (!raw_table || !raw_func)
+        return -1;
+    auto *table = static_cast<_onexit_table_t *>(raw_table);
+    auto func = reinterpret_cast<_PVFV>(raw_func);
+    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    size_t count = table->_first ? static_cast<size_t>(table->_last - table->_first) : 0;
+    size_t capacity = table->_first ? static_cast<size_t>(table->_end - table->_first) : 0;
+    if (count == capacity) {
+        size_t new_capacity = capacity ? capacity * 2 : 32;
+        auto *callbacks = static_cast<_PVFV *>(
+            std::realloc(table->_first, new_capacity * sizeof(_PVFV)));
+        if (!callbacks)
+            return -1;
+        table->_first = callbacks;
+        table->_last = callbacks + count;
+        table->_end = callbacks + new_capacity;
+    }
+    *table->_last++ = func;
     return 0;
 }
 
-WINAPI int crt__initialize_onexit_table(void* table) {
-    // DUMMY
+WINAPI int crt__initialize_onexit_table(void* raw_table) {
+    if (!raw_table)
+        return -1;
+    auto *table = static_cast<_onexit_table_t *>(raw_table);
+    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    if (table->_first || table->_last || table->_end)
+        return 0;
+    *table = {};
     return 0;
 }
 
@@ -1346,19 +1753,24 @@ WINAPI float crt_sqrtf(float x) {
 WINAPI void msvcp__Xbad_function_call() { std::terminate(); }
 WINAPI const char *msvcp__Winerror_map(int err) { return strerror(err); }
 WINAPI const char *msvcp__Syserror_map(int err) { return strerror(err); }
-WINAPI void msvcp__Xout_of_range(const char *msg) { throw std::out_of_range(msg ? msg : "out_of_range"); }
-WINAPI void msvcp__Xlength_error(const char *msg) { throw std::length_error(msg ? msg : "length_error"); }
+WINAPI void msvcp__Xout_of_range(const char *msg) { (void)msg; unsupported_msvc_exception("_Xout_of_range"); }
+WINAPI void msvcp__Xlength_error(const char *msg) { (void)msg; unsupported_msvc_exception("_Xlength_error"); }
 WINAPI void msvcp__Thrd_yield() { sched_yield(); }
-WINAPI void msvcp__Xbad_alloc() { throw std::bad_alloc(); }
+WINAPI void msvcp__Xbad_alloc() { unsupported_msvc_exception("_Xbad_alloc"); }
 
-WINAPI void msvcr_scalar_delete(void *ptr) { }
+WINAPI void msvcr_operator_delete_array(void *ptr) { crt_free(ptr); }
 WINAPI int msvcr_sprintf_s(char *buffer, size_t sizeOfBuffer, const char *format, ULONG_PTR a1 = 0, ULONG_PTR a2 = 0, ULONG_PTR a3 = 0, ULONG_PTR a4 = 0, ULONG_PTR a5 = 0, ULONG_PTR a6 = 0, ULONG_PTR a7 = 0, ULONG_PTR a8 = 0) {
     return snprintf(buffer, sizeOfBuffer, format, a1, a2, a3, a4, a5, a6, a7, a8);
 }
 WINAPI int msvcr_printf(const char *format, ULONG_PTR a1 = 0, ULONG_PTR a2 = 0, ULONG_PTR a3 = 0, ULONG_PTR a4 = 0, ULONG_PTR a5 = 0, ULONG_PTR a6 = 0, ULONG_PTR a7 = 0, ULONG_PTR a8 = 0) {
     return printf(format, a1, a2, a3, a4, a5, a6, a7, a8);
 }
-WINAPI void *msvcr_operator_new(size_t size) { void *ptr = malloc(size + ALLOC_PADDING); heap_track_alloc(ptr); return ptr; }
+WINAPI void *msvcr_operator_new(size_t size) {
+    void *ptr = crt_malloc(size ? size : 1);
+    if (!ptr)
+        std::abort();
+    return ptr;
+}
 WINAPI void msvcr_context_yield() { sched_yield(); }
 WINAPI int msvcr_sprintf(char *buffer, const char *format, ULONG_PTR a1 = 0, ULONG_PTR a2 = 0, ULONG_PTR a3 = 0, ULONG_PTR a4 = 0, ULONG_PTR a5 = 0, ULONG_PTR a6 = 0, ULONG_PTR a7 = 0, ULONG_PTR a8 = 0) {
     return sprintf(buffer, format, a1, a2, a3, a4, a5, a6, a7, a8);
@@ -1405,14 +1817,34 @@ WINAPI FILE *msvcr__wfopen(LPCWSTR filename, LPCWSTR mode) {
 }
 WINAPI float msvcr_powf(float x, float y) { return std::pow(x, y); }
 WINAPI float msvcr_atan2f(float y, float x) { return std::atan2(y, x); }
-WINAPI void msvcr__lock(int locknum) {}
-WINAPI void msvcr__unlock(int locknum) {}
-WINAPI void *msvcr__calloc_crt(size_t count, size_t size) { void *ptr = calloc(1, count * size + ALLOC_PADDING); heap_track_alloc(ptr); return ptr; }
-WINAPI void *msvcr___dllonexit(void *func, void **start, void **end) { return func; }
-WINAPI void *msvcr__onexit(void *func) { return func; }
+WINAPI void msvcr__lock(int locknum) { (void)locknum; g_onexit_mutex.lock(); }
+WINAPI void msvcr__unlock(int locknum) { (void)locknum; g_onexit_mutex.unlock(); }
+WINAPI void *msvcr__calloc_crt(size_t count, size_t size) {
+    size_t total;
+    return checked_mul_size(count, size, total) ? calloc(1, total) : nullptr;
+}
+WINAPI void *msvcr___dllonexit(void *raw_func, void **start, void **end) {
+    if (!raw_func || !start || !end)
+        return nullptr;
+    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    auto first = static_cast<_onexit_t *>(*start);
+    auto last = static_cast<_onexit_t *>(*end);
+    size_t count = first && last >= first ? static_cast<size_t>(last - first) : 0;
+    auto *callbacks = static_cast<_onexit_t *>(
+        std::realloc(first, (count + 1) * sizeof(_onexit_t)));
+    if (!callbacks)
+        return nullptr;
+    callbacks[count] = reinterpret_cast<_onexit_t>(raw_func);
+    *start = callbacks;
+    *end = callbacks + count + 1;
+    return raw_func;
+}
+WINAPI void *msvcr__onexit(void *func) {
+    return crt__register_onexit_function(&g_process_onexit, func) == 0 ? func : nullptr;
+}
 WINAPI int msvcr___CppXcptFilter(unsigned long xcptnum, void *pxcptinfoptrs) { return 0; }
 WINAPI void msvcr__amsg_exit(int errnum) { abort(); }
-WINAPI void *msvcr__malloc_crt(size_t size) { void *ptr = malloc(size + ALLOC_PADDING); heap_track_alloc(ptr); return ptr; }
+WINAPI void *msvcr__malloc_crt(size_t size) { return crt_malloc(size); }
 WINAPI void msvcr___crt_debugger_hook(int reserved) {}
 WINAPI LONG msvcr___crtUnhandledException(EXCEPTION_POINTERS *exceptionInfo) { return 0; }
 WINAPI void msvcr___crtTerminateProcess(UINT exitCode) { abort(); }
@@ -1448,34 +1880,67 @@ WINAPI void *msvcr___RTDynamicCast(void *inptr, LONG vfdelta, void *src, void *t
         uint32_t attributes;
     };
 
-    auto vtable = *reinterpret_cast<void ***>(inptr);
+    auto source_object = static_cast<uint8_t *>(inptr);
+    auto vtable = *reinterpret_cast<void ***>(source_object + vfdelta);
     auto locator = reinterpret_cast<const ObjectLocator *>(vtable[-1]);
+    if (locator->signature != 1)
+        unsupported_msvc_exception("__RTDynamicCast: unsupported object locator");
     auto image_base = reinterpret_cast<const uint8_t *>(locator) - locator->self;
     auto hierarchy = reinterpret_cast<const ClassHierarchy *>(image_base + locator->type_hierarchy);
+    if (hierarchy->attributes & 0x6)
+        unsupported_msvc_exception("__RTDynamicCast: virtual or ambiguous hierarchy");
     auto base_classes = reinterpret_cast<const uint32_t *>(image_base + hierarchy->base_classes);
+    auto source_name = reinterpret_cast<const char *>(src) + 16;
     auto target_name = reinterpret_cast<const char *>(target) + 16;
+    auto complete_object = source_object + vfdelta - locator->base_class_offset;
+    bool source_matches = false;
+    uint8_t *result = nullptr;
 
     for (uint32_t i = 0; i < hierarchy->count; ++i) {
         auto base = reinterpret_cast<const BaseClassDescriptor *>(image_base + base_classes[i]);
+        if (base->vbtable_offset != -1)
+            unsupported_msvc_exception("__RTDynamicCast: virtual base");
         auto type_name = reinterpret_cast<const char *>(image_base + base->type_descriptor) + 16;
-        if (std::strcmp(type_name, target_name) != 0)
+        auto candidate = complete_object + base->member_offset;
+        if (std::strcmp(type_name, source_name) == 0 && candidate == source_object)
+            source_matches = true;
+        if (std::strcmp(type_name, target_name) != 0 || (base->attributes & 0x0f))
             continue;
-
-        auto result = reinterpret_cast<uint8_t *>(inptr) - locator->base_class_offset;
-        if (base->vbtable_offset >= 0) {
-            auto vbtable = *reinterpret_cast<uint8_t **>(result + base->vbtable_offset);
-            result += *reinterpret_cast<int32_t *>(vbtable + base->vbase_offset);
-        }
-        return result + base->member_offset;
+        if (result && result != candidate)
+            unsupported_msvc_exception("__RTDynamicCast: ambiguous target");
+        result = candidate;
     }
+    if (!source_matches)
+        unsupported_msvc_exception("__RTDynamicCast: source subobject mismatch");
+    if (result)
+        return result;
     if (isReference)
-        throw std::bad_cast();
+        unsupported_msvc_exception("__RTDynamicCast: failed reference cast");
     return nullptr;
 }
-WINAPI void *msvcr_realloc(void *memblock, size_t size) { if (memblock) { std::lock_guard<std::mutex> lock(g_heap_mutex); g_freed_blocks.erase(memblock); } void *ptr = realloc(memblock, size + ALLOC_PADDING); heap_track_alloc(ptr); return ptr; }
-WINAPI void msvcr__aligned_free(void *memblock) { if (!heap_track_free(memblock, "msvcr__aligned_free")) free(memblock); }
-WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) { void *ptr = nullptr; if (posix_memalign(&ptr, alignment, size + ALLOC_PADDING) == 0) { heap_track_alloc(ptr); return ptr; } return nullptr; }
-WINAPI void msvcr_operator_delete(void *ptr) { }
+WINAPI void *msvcr_realloc(void *memblock, size_t size) {
+    if (!memblock)
+        return crt_malloc(size);
+    if (!size) {
+        crt_free(memblock);
+        return nullptr;
+    }
+    return realloc(memblock, size);
+}
+WINAPI void msvcr__aligned_free(void *memblock) { free(memblock); }
+WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
+    if (!alignment || (alignment & (alignment - 1))) {
+        errno = EINVAL;
+        return nullptr;
+    }
+    alignment = std::max(alignment, size_t{16});
+    void *ptr = nullptr;
+    int error = posix_memalign(&ptr, alignment, size);
+    if (error)
+        errno = error;
+    return error ? nullptr : ptr;
+}
+WINAPI void msvcr_operator_delete(void *ptr) { crt_free(ptr); }
 WINAPI clock_t msvcr_clock() { return clock(); }
 WINAPI unsigned int msvcr_current_scheduler_id() { return 0; }
 WINAPI double msvcr_sqrt(double x) { return std::sqrt(x); }
@@ -1708,9 +2173,7 @@ WINAPI int msvcrt_wcscpy_s(WCHAR *dest, size_t destsz, const WCHAR *src) {
     return 0;
 }
 WINAPI void *msvcrt_operator_new_array(size_t size) { /* ??_U@YAPEAX_K@Z */
-    void *ptr = malloc(size + ALLOC_PADDING);
-    heap_track_alloc(ptr);
-    return ptr;
+    return msvcr_operator_new(size);
 }
 WINAPI int msvcrt_swprintf_s(WCHAR *buffer, size_t sizeInWords, const WCHAR *format, ...) {
     if (buffer && sizeInWords > 0) buffer[0] = 0;
@@ -1930,7 +2393,7 @@ WINAPI DWORD GetTickCount() {
     return static_cast<DWORD>(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 WINAPI void TerminateProcess(HANDLE hProcess, UINT uExitCode) { _exit(uExitCode); }
-WINAPI void SetLastError(DWORD dwErrCode) { /* ignore */ }
+WINAPI void SetLastError(DWORD dwErrCode) { g_last_error = dwErrCode; }
 WINAPI HANDLE CreateFileMappingW(HANDLE hFile, void *lpAttributes, DWORD flProtect, DWORD dwMaxSizeHigh, DWORD dwMaxSizeLow, const WCHAR *lpName) {
     return reinterpret_cast<HANDLE>(1); // Stub
 }
@@ -1948,14 +2411,167 @@ WINAPI HANDLE CreateFileA(const char *lpFileName, DWORD dwDesiredAccess, DWORD d
     return fd >= 0 ? reinterpret_cast<HANDLE>(static_cast<intptr_t>(fd + 1)) : INVALID_HANDLE_VALUE;
 }
 WINAPI void *VirtualAlloc(void *lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
-    void *ptr = mmap(lpAddress, dwSize, PROT_READ | PROT_WRITE | PROT_EXEC,
-                     MAP_PRIVATE | MAP_ANONYMOUS | (lpAddress ? MAP_FIXED : 0), -1, 0);
-    return ptr == MAP_FAILED ? nullptr : ptr;
+    int protection;
+    if (!dwSize || (flAllocationType != MEM_RESERVE &&
+                    flAllocationType != MEM_COMMIT &&
+                    flAllocationType != (MEM_RESERVE | MEM_COMMIT)) ||
+        !windows_protection(flProtect, protection)) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return nullptr;
+    }
+
+    const size_t page_size = host_page_size();
+    uintptr_t requested = reinterpret_cast<uintptr_t>(lpAddress);
+    uintptr_t requested_end;
+    if (!checked_add_address(requested, dwSize, requested_end)) {
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_virtual_memory_mutex);
+    if (flAllocationType == MEM_COMMIT && lpAddress) {
+        uintptr_t start = requested & ~(static_cast<uintptr_t>(page_size) - 1);
+        uintptr_t end;
+        if (!round_up_address(requested_end, page_size, end) ||
+            find_reservation(start, end) == g_virtual_reservations.end()) {
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return nullptr;
+        }
+        if (mprotect(reinterpret_cast<void *>(start), end - start, protection) != 0) {
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        return reinterpret_cast<void *>(start);
+    }
+
+    size_t reservation_size;
+    uintptr_t reservation_base;
+    uintptr_t commit_start;
+    uintptr_t commit_end;
+    void *mapping;
+    if (lpAddress) {
+        reservation_base = requested & ~(static_cast<uintptr_t>(WINDOWS_ALLOCATION_GRANULARITY) - 1);
+        if (!reservation_base) {
+            g_last_error = ERROR_INVALID_PARAMETER;
+            return nullptr;
+        }
+        if (!round_up_address(requested_end, page_size, commit_end)) {
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        reservation_size = commit_end - reservation_base;
+        commit_start = reservation_base;
+        mapping = mmap(reinterpret_cast<void *>(reservation_base), reservation_size, PROT_NONE,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (mapping == MAP_FAILED) {
+            g_last_error = errno == EEXIST ? ERROR_INVALID_ADDRESS : ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        if (reinterpret_cast<uintptr_t>(mapping) != reservation_base) {
+            munmap(mapping, reservation_size);
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return nullptr;
+        }
+    } else {
+        if (!round_up_size(dwSize, page_size, reservation_size)) {
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        size_t mapping_size;
+        if (!checked_add_size(reservation_size, WINDOWS_ALLOCATION_GRANULARITY, mapping_size)) {
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        mapping = mmap(nullptr, mapping_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (mapping == MAP_FAILED) {
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        uintptr_t mapping_base = reinterpret_cast<uintptr_t>(mapping);
+        if (!round_up_address(mapping_base, WINDOWS_ALLOCATION_GRANULARITY, reservation_base)) {
+            munmap(mapping, mapping_size);
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        size_t prefix = reservation_base - mapping_base;
+        size_t suffix = mapping_size - prefix - reservation_size;
+        if ((prefix && munmap(mapping, prefix) != 0) ||
+            (suffix && munmap(reinterpret_cast<void *>(reservation_base + reservation_size), suffix) != 0)) {
+            munmap(mapping, mapping_size);
+            g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+            return nullptr;
+        }
+        commit_start = reservation_base;
+        commit_end = reservation_base + reservation_size;
+        mapping = reinterpret_cast<void *>(reservation_base);
+    }
+
+    if ((flAllocationType & MEM_COMMIT) &&
+        mprotect(reinterpret_cast<void *>(commit_start), commit_end - commit_start, protection) != 0) {
+        munmap(mapping, reservation_size);
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+    try {
+        if (!g_virtual_reservations.emplace(reservation_base, reservation_size).second) {
+            munmap(mapping, reservation_size);
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return nullptr;
+        }
+    } catch (const std::bad_alloc &) {
+        munmap(mapping, reservation_size);
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+    return reinterpret_cast<void *>(reservation_base);
 }
 WINAPI BOOL VirtualFree(void *lpAddress, SIZE_T dwSize, DWORD dwFreeType) {
-    if (dwFreeType == 0x8000) { // MEM_RELEASE
-        munmap(lpAddress, dwSize ? dwSize : 4096);
+    if (!lpAddress || (dwFreeType != MEM_DECOMMIT && dwFreeType != MEM_RELEASE)) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return FALSE;
     }
+
+    uintptr_t address = reinterpret_cast<uintptr_t>(lpAddress);
+    std::lock_guard<std::mutex> lock(g_virtual_memory_mutex);
+    if (dwFreeType == MEM_RELEASE) {
+        auto it = g_virtual_reservations.find(address);
+        if (dwSize || it == g_virtual_reservations.end()) {
+            g_last_error = dwSize ? ERROR_INVALID_PARAMETER : ERROR_INVALID_ADDRESS;
+            return FALSE;
+        }
+        if (munmap(lpAddress, it->second) != 0) {
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return FALSE;
+        }
+        g_virtual_reservations.erase(it);
+        return TRUE;
+    }
+
+    uintptr_t start;
+    uintptr_t end;
+    if (!dwSize) {
+        auto it = g_virtual_reservations.find(address);
+        if (it == g_virtual_reservations.end()) {
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return FALSE;
+        }
+        start = it->first;
+        end = start + it->second;
+    } else {
+        const size_t page_size = host_page_size();
+        uintptr_t requested_end;
+        start = address & ~(static_cast<uintptr_t>(page_size) - 1);
+        if (!checked_add_address(address, dwSize, requested_end) ||
+            !round_up_address(requested_end, page_size, end) ||
+            find_reservation(start, end) == g_virtual_reservations.end()) {
+            g_last_error = ERROR_INVALID_ADDRESS;
+            return FALSE;
+        }
+    }
+    void *result = mmap(reinterpret_cast<void *>(start), end - start, PROT_NONE,
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (result != reinterpret_cast<void *>(start))
+        std::abort();
     return TRUE;
 }
 WINAPI HMODULE LoadLibraryExW(const WCHAR *lpLibFileName, HANDLE hFile, DWORD dwFlags) {
@@ -2020,7 +2636,7 @@ WINAPI DWORD ExpandEnvironmentStringsW(const WCHAR *lpSrc, WCHAR *lpDst, DWORD n
 WINAPI BOOL FlushViewOfFile(const void *lpBaseAddress, SIZE_T dwNumberOfBytesToFlush) { return TRUE; }
 WINAPI void *MapViewOfFileEx(HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap, void *lpBaseAddress) { return nullptr; }
 WINAPI void *MapViewOfFile(HANDLE hFileMappingObject, DWORD dwDesiredAccess, DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow, SIZE_T dwNumberOfBytesToMap) { return nullptr; }
-WINAPI DWORD GetLastError() { return 0; }
+WINAPI DWORD GetLastError() { return g_last_error; }
 WINAPI BOOL GetFileSizeEx(HANDLE hFile, LARGE_INTEGER *lpFileSize) {
     if (lpFileSize) *lpFileSize = 0;
     return TRUE;
@@ -2056,13 +2672,11 @@ WINAPI int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, const char *lpMulti
 WINAPI HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize) { return reinterpret_cast<HANDLE>(1); }
 WINAPI BOOL HeapDestroy(HANDLE hHeap) { return TRUE; }
 WINAPI void *HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes) {
-    void *ptr = (dwFlags & 0x08) ? calloc(1, dwBytes + ALLOC_PADDING) : malloc(dwBytes + ALLOC_PADDING);
-    heap_track_alloc(ptr);
-    return ptr;
+    return (dwFlags & 0x08) ? calloc(1, dwBytes) : malloc(dwBytes);
 }
 WINAPI HANDLE GetProcessHeap() { return reinterpret_cast<HANDLE>(1); }
 WINAPI BOOL HeapFree(HANDLE hHeap, DWORD dwFlags, void *lpMem) {
-    if (!heap_track_free(lpMem, "HeapFree")) free(lpMem);
+    free(lpMem);
     return TRUE;
 }
 
@@ -2149,6 +2763,7 @@ void register_windows_library_functions() {
     KERNEL32_FUNC(GetCurrentThreadId);
     KERNEL32_FUNC(InitializeSListHead);
     KERNEL32_FUNC(DisableThreadLibraryCalls);
+    KERNEL32_FUNC(RaiseException);
     KERNEL32_FUNC(GetSystemTimeAsFileTime);
     KERNEL32_FUNC(GetProcAddress);
     KERNEL32_FUNC(GetLogicalProcessorInformation);
@@ -2160,6 +2775,7 @@ void register_windows_library_functions() {
     KERNEL32_FUNC(FlsAlloc);
     KERNEL32_FUNC(FlsFree);
     KERNEL32_FUNC(FlsSetValue);
+    KERNEL32_FUNC(FlsGetValue);
     KERNEL32_FUNC(GetSystemInfo);
     KERNEL32_FUNC(FreeLibrary);
     KERNEL32_FUNC(LoadLibraryA);
@@ -2194,6 +2810,7 @@ void register_windows_library_functions() {
     VCRUNTIME140_FUNC(memcpy);
     VCRUNTIME140_FUNC(memchr);
     VCRUNTIME140_FUNC(__CxxFrameHandler3);
+    VCRUNTIME140_FUNC(__CxxFrameHandler4);
     VCRUNTIME140_FUNC(__std_terminate);
     VCRUNTIME140_FUNC(_purecall);
     VCRUNTIME140_FUNC(__C_specific_handler);
@@ -2202,6 +2819,9 @@ void register_windows_library_functions() {
     VCRUNTIME140_FUNC(__std_exception_destroy);
     VCRUNTIME140_FUNC(__std_type_info_destroy_list);
     VCRUNTIME140_FUNC(_CxxThrowException);
+    VCRUNTIME140_FUNC(__current_exception);
+    VCRUNTIME140_FUNC(__current_exception_context);
+    register_function("VCRUNTIME140.dll", "terminate", generic_func(&msvcr_terminate));
 
     CRT_FUNC(heap, malloc);
     CRT_FUNC(heap, _callnewh);
@@ -2240,7 +2860,7 @@ void register_windows_library_functions() {
     register_function("MSVCP120.dll", "_Thrd_yield", generic_func(&msvcp__Thrd_yield));
     register_function("MSVCP120.dll", "?_Xbad_alloc@std@@YAXXZ", generic_func(&msvcp__Xbad_alloc));
 
-    register_function("MSVCR120.dll", "??_V@YAXPEAX@Z", generic_func(&msvcr_scalar_delete));
+    register_function("MSVCR120.dll", "??_V@YAXPEAX@Z", generic_func(&msvcr_operator_delete_array));
     register_function("MSVCR120.dll", "sprintf_s", generic_func(&msvcr_sprintf_s));
     register_function("MSVCR120.dll", "printf", generic_func(&msvcr_printf));
     register_function("MSVCR120.dll", "??2@YAPEAX_K@Z", generic_func(&msvcr_operator_new));
@@ -2416,7 +3036,7 @@ void register_windows_library_functions() {
     register_function("msvcrt.dll", "_initterm_e", generic_func(&crt__initterm_e));
     register_function("msvcrt.dll", "abort", generic_func(static_cast<void(*)()>(&abort)));
     register_function("msvcrt.dll", "_beginthreadex", generic_func(&CreateThread));
-    register_function("msvcrt.dll", "_endthreadex", generic_func(static_cast<void(*)(unsigned)>([](unsigned retval) -> void { })));
+    register_function("msvcrt.dll", "_endthreadex", generic_func(&crt_endthreadex));
 
     // ADVAPI32.dll
     register_function("ADVAPI32.dll", "CryptDestroyHash", generic_func(&CryptDestroyHash));

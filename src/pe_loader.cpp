@@ -6,6 +6,7 @@
 
 #include <asm/prctl.h>
 #include <asm/unistd.h>
+#include <algorithm>
 #include <cerrno>
 #include <err.h>
 #include <climits>
@@ -29,6 +30,7 @@
 #include "pe_loader.h"
 #include "pe_sidecar.h"
 #include "support.h"
+#include "winlibs.h"
 
 // ---------------------------------------------------------------------------
 // Export table
@@ -38,24 +40,21 @@ struct pe_export {
     const char *dll;
     const char *name;
     generic_func addr;
+    pe_image *owner;
 };
 
 static constexpr int MAX_EXPORTS = 4096;
 static pe_export pe_export_list[MAX_EXPORTS];
 static int num_pe_exports = 0;
+static std::recursive_mutex g_loader_mutex;
 
-void register_function(const char *dll_name, const char *func_name, generic_func func)
+void pe_lock_loader() { g_loader_mutex.lock(); }
+void pe_unlock_loader() { g_loader_mutex.unlock(); }
+
+void register_function(const char *dll_name, const char *func_name, generic_func func,
+                       pe_image *owner)
 {
-    // Dedupe on name: last-writer-wins matches Windows LoadLibrary semantics
-    // for symbol resolution, and is what keeps repeated load_dll() calls from
-    // overflowing the fixed-size table.
-    for (int i = 0; i < num_pe_exports; i++) {
-        if (strcmp(pe_export_list[i].name, func_name) == 0) {
-            pe_export_list[i].dll = dll_name;
-            pe_export_list[i].addr = func;
-            return;
-        }
-    }
+    std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
     if (num_pe_exports >= MAX_EXPORTS) {
         fprintf(stderr,
             "register_function: export table full (%d), dropping %s!%s",
@@ -67,12 +66,14 @@ void register_function(const char *dll_name, const char *func_name, generic_func
     pe_export_list[num_pe_exports].dll = dll_name;
     pe_export_list[num_pe_exports].name = func_name;
     pe_export_list[num_pe_exports].addr = func;
+    pe_export_list[num_pe_exports].owner = owner;
     num_pe_exports++;
 }
 
 generic_func get_export(const char *name)
 {
-    for (int i = 0; i < num_pe_exports; i++) {
+    std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
+    for (int i = num_pe_exports - 1; i >= 0; --i) {
         if (strcmp(pe_export_list[i].name, name) == 0) {
             return pe_export_list[i].addr;
         }
@@ -80,17 +81,21 @@ generic_func get_export(const char *name)
     return nullptr;
 }
 
+void pe_discard_image_exports(pe_image *image)
+{
+    std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
+    int kept = 0;
+    for (int i = 0; i < num_pe_exports; ++i)
+        if (pe_export_list[i].owner != image)
+            pe_export_list[kept++] = pe_export_list[i];
+    num_pe_exports = kept;
+}
+
 // ---------------------------------------------------------------------------
 // Shared kernel data
 // ---------------------------------------------------------------------------
 
 PKUSER_SHARED_DATA SharedUserData;
-
-// ---------------------------------------------------------------------------
-// FLS callback array (used by winlibs.cpp)
-// ---------------------------------------------------------------------------
-
-PFLS_CALLBACK_FUNCTION FlsCallbacks[1024] = {nullptr};
 
 // ---------------------------------------------------------------------------
 // TLS bitmap and loaded image tracking
@@ -105,17 +110,53 @@ static RTL_BITMAP TlsBitmap = {
 static constexpr size_t MAX_LOADED_IMAGES = 16;
 static pe_image *g_loaded_images[MAX_LOADED_IMAGES] = {};
 static size_t g_loaded_image_count = 0;
+static size_t g_pending_image_count = 0;
 static std::mutex g_loaded_images_mutex;
+static thread_local pe_image *g_attaching_image;
+
+struct loaded_image_snapshot {
+    pe_image *image;
+    bool notifications_disabled;
+};
+
+static std::vector<loaded_image_snapshot> loaded_images_snapshot()
+{
+    std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
+    std::vector<loaded_image_snapshot> images;
+    for (size_t i = 0; i < g_loaded_image_count; ++i)
+        images.push_back({g_loaded_images[i],
+                          g_loaded_images[i]->thread_notifications_disabled});
+    return images;
+}
 
 #ifdef NATIVE_WRAPPERS_TESTING
 void pe_register_loaded_image_for_test(pe_image *image)
 {
     std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
+    if (image->registered)
+        return;
+    if (g_loaded_image_count + g_pending_image_count == MAX_LOADED_IMAGES)
+        std::abort();
     g_loaded_images[g_loaded_image_count++] = image;
+    image->registered = true;
 }
 #endif
 
 DWORD WINAPI TlsAlloc();
+BOOL WINAPI TlsFree(DWORD);
+
+void pe_discard_image(pe_image *image)
+{
+    std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
+    pe_discard_image_exports(image);
+    if (image->tls_directory)
+        TlsFree(image->tls_index);
+    if (image->sidecar_handle)
+        dlclose(image->sidecar_handle);
+    else if (image->image)
+        munmap(image->image, image->size);
+    *image = {};
+}
 
 uintptr_t InitialLocalStorage[1024] = {0};
 
@@ -127,14 +168,19 @@ struct nt_thread_context {
     EXCEPTION_FRAME exception_frame;
     TEB thread_environment;
     uintptr_t local_storage[1024];
+    pe_image *attached_images[MAX_LOADED_IMAGES];
+    size_t attached_image_count;
+    bool cleaning_up;
 };
 
 static pthread_key_t g_nt_thread_context_key;
 static pthread_once_t g_nt_thread_context_key_once = PTHREAD_ONCE_INIT;
 
+static void destroy_nt_thread_context(void *value);
+
 static void make_nt_thread_context_key()
 {
-    pthread_key_create(&g_nt_thread_context_key, nullptr);
+    pthread_key_create(&g_nt_thread_context_key, destroy_nt_thread_context);
 }
 
 static nt_thread_context *get_nt_thread_context()
@@ -175,14 +221,51 @@ static void run_tls_callbacks(pe_image *pe, DWORD reason)
         (*callbacks)(pe->image, reason, nullptr);
 }
 
+static bool thread_has_image(nt_thread_context *ctx, pe_image *image)
+{
+    for (size_t i = 0; i < ctx->attached_image_count; ++i)
+        if (ctx->attached_images[i] == image)
+            return true;
+    return false;
+}
+
+static bool attach_image(nt_thread_context *ctx, pe_image *image)
+{
+    if (thread_has_image(ctx, image))
+        return false;
+    if (ctx->attached_image_count == MAX_LOADED_IMAGES)
+        return false;
+    ctx->attached_images[ctx->attached_image_count++] = image;
+    return true;
+}
+
+static void detach_image(nt_thread_context *ctx, pe_image *image)
+{
+    for (size_t i = 0; i < ctx->attached_image_count; ++i) {
+        if (ctx->attached_images[i] != image)
+            continue;
+        std::memmove(&ctx->attached_images[i], &ctx->attached_images[i + 1],
+                     (ctx->attached_image_count - i - 1) * sizeof(ctx->attached_images[0]));
+        ctx->attached_images[--ctx->attached_image_count] = nullptr;
+        return;
+    }
+}
+
 bool pe_initialize_tls_for_current_thread(struct pe_image *pe, DWORD reason)
 {
-    if (!pe || !pe->tls_directory)
-        return true;
+    if (!pe)
+        return false;
 
     auto *ctx = get_nt_thread_context();
     if (!ctx)
         return false;
+
+    bool needs_attachment = reason == DLL_PROCESS_ATTACH || reason == DLL_THREAD_ATTACH;
+    bool already_attached = thread_has_image(ctx, pe);
+
+    if (!pe->tls_directory) {
+        return !needs_attachment || already_attached || attach_image(ctx, pe);
+    }
 
     constexpr size_t MAX_TLS_SLOTS = sizeof(ctx->local_storage) / sizeof(ctx->local_storage[0]);
     if (pe->tls_index >= MAX_TLS_SLOTS) {
@@ -206,6 +289,14 @@ bool pe_initialize_tls_for_current_thread(struct pe_image *pe, DWORD reason)
         newly_initialized = true;
     }
 
+    if (needs_attachment && !already_attached && !attach_image(ctx, pe)) {
+        if (newly_initialized) {
+            std::free(reinterpret_cast<void *>(ctx->local_storage[pe->tls_index]));
+            ctx->local_storage[pe->tls_index] = 0;
+        }
+        return false;
+    }
+
     if (newly_initialized && (reason == DLL_PROCESS_ATTACH || reason == DLL_THREAD_ATTACH))
         run_tls_callbacks(pe, reason);
 
@@ -214,21 +305,44 @@ bool pe_initialize_tls_for_current_thread(struct pe_image *pe, DWORD reason)
 
 void pe_initialize_tls_for_loaded_images(DWORD reason)
 {
-    std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
-    for (size_t i = 0; i < g_loaded_image_count; ++i)
-        pe_initialize_tls_for_current_thread(g_loaded_images[i], reason);
+    std::lock_guard<std::recursive_mutex> loader_lock(g_loader_mutex);
+    for (const auto &loaded : loaded_images_snapshot())
+        pe_initialize_tls_for_current_thread(loaded.image, reason);
 }
 
 void pe_notify_loaded_images(DWORD reason)
 {
-    std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
-    for (size_t i = 0; i < g_loaded_image_count; ++i) {
-        auto *pe = g_loaded_images[i];
-        if (!pe)
-            continue;
-        if (reason == DLL_THREAD_ATTACH || reason == DLL_PROCESS_ATTACH) {
+    std::lock_guard<std::recursive_mutex> loader_lock(g_loader_mutex);
+    auto *ctx = get_nt_thread_context();
+    if (!ctx)
+        return;
+
+    auto images = loaded_images_snapshot();
+    if (reason == DLL_THREAD_DETACH)
+        std::reverse(images.begin(), images.end());
+
+    for (const auto &loaded : images) {
+        auto *pe = loaded.image;
+        bool attached = thread_has_image(ctx, pe);
+        if (reason == DLL_THREAD_ATTACH) {
+            if (attached || loaded.notifications_disabled)
+                continue;
             if (!pe_initialize_tls_for_current_thread(pe, reason))
                 continue;
+        } else if (reason == DLL_THREAD_DETACH) {
+            if (!attached)
+                continue;
+            if (!loaded.notifications_disabled) {
+                run_tls_callbacks(pe, reason);
+                if (pe->entry)
+                    pe->entry(pe->image, reason, nullptr);
+            }
+            if (pe->tls_directory && pe->tls_index < 1024 && ctx->local_storage[pe->tls_index]) {
+                std::free(reinterpret_cast<void *>(ctx->local_storage[pe->tls_index]));
+                ctx->local_storage[pe->tls_index] = 0;
+            }
+            detach_image(ctx, pe);
+            continue;
         }
         if (pe->entry)
             pe->entry(pe->image, reason, nullptr);
@@ -237,9 +351,99 @@ void pe_notify_loaded_images(DWORD reason)
 
 void pe_ensure_tls_for_loaded_images()
 {
+    pe_notify_loaded_images(DLL_THREAD_ATTACH);
+}
+
+void pe_cleanup_current_thread()
+{
+    pthread_once(&g_nt_thread_context_key_once, make_nt_thread_context_key);
+    auto *ctx = static_cast<nt_thread_context *>(pthread_getspecific(g_nt_thread_context_key));
+    if (!ctx || ctx->cleaning_up)
+        return;
+    ctx->cleaning_up = true;
+    winlibs_cleanup_fls_for_current_thread();
+    pe_notify_loaded_images(DLL_THREAD_DETACH);
+    winlibs_cleanup_fls_for_current_thread();
+    pthread_setspecific(g_nt_thread_context_key, nullptr);
+    std::free(ctx);
+}
+
+static void destroy_nt_thread_context(void *value)
+{
+    auto *ctx = static_cast<nt_thread_context *>(value);
+    if (!ctx)
+        return;
+    pthread_setspecific(g_nt_thread_context_key, ctx);
+    pe_cleanup_current_thread();
+}
+
+bool pe_disable_thread_library_calls(HMODULE module)
+{
+    if (g_attaching_image && g_attaching_image->image == module) {
+        if (g_attaching_image->tls_directory)
+            return false;
+        g_attaching_image->thread_notifications_disabled = true;
+        return true;
+    }
     std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
-    for (size_t i = 0; i < g_loaded_image_count; ++i)
-        pe_initialize_tls_for_current_thread(g_loaded_images[i], DLL_THREAD_ATTACH);
+    for (size_t i = 0; i < g_loaded_image_count; ++i) {
+        auto *image = g_loaded_images[i];
+        if (image->image != module)
+            continue;
+        if (image->tls_directory)
+            return false;
+        image->thread_notifications_disabled = true;
+        return true;
+    }
+    return false;
+}
+
+bool pe_begin_process_attach(pe_image *image)
+{
+    if (g_attaching_image)
+        return false;
+    std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
+    if (g_loaded_image_count + g_pending_image_count == MAX_LOADED_IMAGES)
+        return false;
+    ++g_pending_image_count;
+    g_attaching_image = image;
+    return true;
+}
+
+bool pe_finish_process_attach(pe_image *image, bool attached, bool entry_called)
+{
+    if (g_attaching_image != image)
+        return false;
+    {
+        std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
+        --g_pending_image_count;
+        if (attached) {
+            g_loaded_images[g_loaded_image_count++] = image;
+            image->registered = true;
+        }
+    }
+    if (!attached) {
+        auto *ctx = static_cast<nt_thread_context *>(
+            pthread_getspecific(g_nt_thread_context_key));
+        if (ctx && thread_has_image(ctx, image)) {
+            if (image->tls_directory && image->tls_index < 1024 &&
+                ctx->local_storage[image->tls_index])
+                run_tls_callbacks(image, DLL_PROCESS_DETACH);
+            if (entry_called && image->entry)
+                image->entry(image->image, DLL_PROCESS_DETACH, nullptr);
+            if (image->tls_directory && image->tls_index < 1024 &&
+                ctx->local_storage[image->tls_index]) {
+                std::free(reinterpret_cast<void *>(ctx->local_storage[image->tls_index]));
+                ctx->local_storage[image->tls_index] = 0;
+            }
+            detach_image(ctx, image);
+        } else if (entry_called && image->entry)
+            image->entry(image->image, DLL_PROCESS_DETACH, nullptr);
+        g_attaching_image = nullptr;
+        return true;
+    }
+    g_attaching_image = nullptr;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +611,7 @@ static int read_exports(struct pe_image *pe)
         register_function(
             pe->name,
             (char *)pe->image + name_table[i],
-            (generic_func)((char *)pe->image + address));
+            (generic_func)((char *)pe->image + address), pe);
     }
     return 0;
 }
@@ -614,14 +818,8 @@ int link_pe_images(pe_image *pe_image, unsigned short n)
             if (tls_data->AddressOfIndex)
                 *tls_data->AddressOfIndex = pe->tls_index;
 
-            std::lock_guard<std::mutex> lock(g_loaded_images_mutex);
-            if (g_loaded_image_count < MAX_LOADED_IMAGES) {
-                g_loaded_images[g_loaded_image_count++] = pe;
-            } else {
-                LogMessage("Too many loaded images with TLS");
-                return -EINVAL;
-            }
         }
+
     }
 
     return 0;
@@ -775,6 +973,8 @@ bool pe_load_library(const char *filename, const char *sidecar_path, pe_image *p
     pe->image = nullptr;
     pe->sidecar_handle = nullptr;
     pe->size = 0;
+    pe->registered = false;
+    pe->thread_notifications_disabled = false;
 
     // The caller provides the complete path in a dedicated cache directory.
     // A DLL basename keeps stack traces readable without exposing this ELF to
@@ -793,12 +993,10 @@ bool pe_load_library(const char *filename, const char *sidecar_path, pe_image *p
 
 bool pe_unload_library(pe_image &pe)
 {
-    num_pe_exports = 0;
-    if (pe.sidecar_handle)
-        dlclose(pe.sidecar_handle);
-    else
-        munmap(pe.image, pe.size);
-    return true;
+    std::lock_guard<std::recursive_mutex> loader_lock(g_loader_mutex);
+    (void)pe;
+    LogMessage("PE unload is unsupported until executing calls can be quiesced");
+    return false;
 }
 
 // ---------------------------------------------------------------------------

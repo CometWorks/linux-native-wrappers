@@ -10,6 +10,12 @@
 /out-*/
 /dist/
 
+# Proprietary Windows DLLs used by optional local integration tests.
+/Havok.dll
+/VRage.Physics.Client.dll
+/VRage.Physics.Native.dll
+/VRage.Physics.dll
+
 # Python bytecode caches.
 __pycache__/
 

@@ -206,6 +206,17 @@ if(BUILD_TESTING)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
 
+    add_executable(windows_memory_test
+            ${SOURCES}
+            tests/windows_memory.cpp
+    )
+    target_link_libraries(windows_memory_test PRIVATE c ${CMAKE_DL_LIBS})
+    target_compile_options(windows_memory_test PRIVATE -Wall -fpermissive)
+    add_test(NAME windows_memory COMMAND windows_memory_test)
+    set_tests_properties(windows_memory PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "ASAN_OPTIONS=allocator_may_return_null=1:handle_segv=0")
+
     if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
         add_test(NAME d3dcompiler_preprocess
                 COMMAND ${PYTHON3_EXECUTABLE}
@@ -226,6 +237,16 @@ if(BUILD_TESTING)
                 COMMAND havok_crash_test "${NATIVE_DLL_DIR}/Havok.dll" --trace)
         set_tests_properties(havok_unwind PROPERTIES
                 PASS_REGULAR_EXPRESSION "HkShape_CastRayCollectSingleHit")
+
+        add_executable(havok_memory_test tests/havok_memory.cpp)
+        target_link_libraries(havok_memory_test PRIVATE Havok)
+        add_test(NAME havok_memory
+                COMMAND havok_memory_test
+                        "${NATIVE_DLL_DIR}/Havok.dll"
+                        "${CMAKE_BINARY_DIR}/havok-memory-Havok.dll")
+        set_tests_properties(havok_memory PROPERTIES
+                TIMEOUT 120
+                FAIL_REGULAR_EXPRESSION "duplicate free suppressed")
     endif()
 endif()
 
