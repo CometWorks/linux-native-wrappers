@@ -500,6 +500,12 @@ Implemented in the shared loader and shim layer:
   export bindings restore the previous bare-name binding when discarded.
 - Per-image `DisableThreadLibraryCalls`, `DLL_THREAD_ATTACH`/`DLL_THREAD_DETACH`, PE
   TLS callbacks, per-thread TLS block reclamation, and NT-context destruction.
+  Deliberate decision: the first wrapper call on a foreign thread (managed
+  runtime, GC/finalizer, thread pool) delivers `DLL_THREAD_ATTACH` to PE entry
+  points on that thread — matching Windows behavior for threads created after
+  load, but new relative to the pre-unification TLS-only initialization.
+  Thread-detach ordering follows `LdrShutdownThread`: `DLL_THREAD_DETACH`
+  notifications run first, then FLS callbacks drain.
 - FLS callback preservation and bounded callback re-entry on slot release and
   thread exit. A second drain catches values installed by detach callbacks.
 - Named deterministic boundaries for unsupported MSVC handlers, throws, current

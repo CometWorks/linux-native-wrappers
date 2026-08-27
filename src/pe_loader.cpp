@@ -7,6 +7,7 @@
 #include <asm/prctl.h>
 #include <asm/unistd.h>
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <err.h>
 #include <climits>
@@ -70,9 +71,20 @@ void register_function(const char *dll_name, const char *func_name, generic_func
     num_pe_exports++;
 }
 
-generic_func get_export(const char *name)
+generic_func get_export(const char *name, const char *dll)
 {
     std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
+    // Prefer exports registered for the requested import module so a bare-name
+    // collision in another image cannot shadow them; fall back to the flat
+    // table for module names nothing registered under.
+    if (dll) {
+        for (int i = num_pe_exports - 1; i >= 0; --i) {
+            if (pe_export_list[i].dll && strcasecmp(pe_export_list[i].dll, dll) == 0 &&
+                strcmp(pe_export_list[i].name, name) == 0) {
+                return pe_export_list[i].addr;
+            }
+        }
+    }
     for (int i = num_pe_exports - 1; i >= 0; --i) {
         if (strcmp(pe_export_list[i].name, name) == 0) {
             return pe_export_list[i].addr;
@@ -113,6 +125,11 @@ static size_t g_loaded_image_count = 0;
 static size_t g_pending_image_count = 0;
 static std::mutex g_loaded_images_mutex;
 static thread_local pe_image *g_attaching_image;
+// Bumped whenever an image becomes thread-visible; lets already-attached
+// threads skip the loader locks on the per-call ensure path. Starts at 1 so
+// the zero-initialized thread_local below never matches spuriously.
+static std::atomic<uint64_t> g_image_list_generation{1};
+static thread_local uint64_t t_thread_attach_generation;
 
 struct loaded_image_snapshot {
     pe_image *image;
@@ -139,6 +156,7 @@ void pe_register_loaded_image_for_test(pe_image *image)
         std::abort();
     g_loaded_images[g_loaded_image_count++] = image;
     image->registered = true;
+    g_image_list_generation.fetch_add(1, std::memory_order_release);
 }
 #endif
 
@@ -351,7 +369,13 @@ void pe_notify_loaded_images(DWORD reason)
 
 void pe_ensure_tls_for_loaded_images()
 {
+    // Runs on every exported wrapper call; skip the loader locks once this
+    // thread has attached to the current image list.
+    uint64_t generation = g_image_list_generation.load(std::memory_order_acquire);
+    if (t_thread_attach_generation == generation)
+        return;
     pe_notify_loaded_images(DLL_THREAD_ATTACH);
+    t_thread_attach_generation = generation;
 }
 
 void pe_cleanup_current_thread()
@@ -361,9 +385,12 @@ void pe_cleanup_current_thread()
     if (!ctx || ctx->cleaning_up)
         return;
     ctx->cleaning_up = true;
-    winlibs_cleanup_fls_for_current_thread();
+    // Windows order (LdrShutdownThread): DLL_THREAD_DETACH notifications run
+    // first, then FLS callbacks drain — detach handlers must still see their
+    // FLS values. The drain also catches values installed during detach.
     pe_notify_loaded_images(DLL_THREAD_DETACH);
     winlibs_cleanup_fls_for_current_thread();
+    t_thread_attach_generation = 0;
     pthread_setspecific(g_nt_thread_context_key, nullptr);
     std::free(ctx);
 }
@@ -420,6 +447,7 @@ bool pe_finish_process_attach(pe_image *image, bool attached, bool entry_called)
         if (attached) {
             g_loaded_images[g_loaded_image_count++] = image;
             image->registered = true;
+            g_image_list_generation.fetch_add(1, std::memory_order_release);
         }
     }
     if (!attached) {
@@ -569,7 +597,7 @@ static int process_import_descriptor(void *image, IMAGE_IMPORT_DESCRIPTOR *diren
             address_tbl[i] = reinterpret_cast<ULONG_PTR>(adr);
         } else {
             auto *symname = RVA2VA(image, (lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG) + 2, char *);
-            auto adr = get_export(symname);
+            auto adr = get_export(symname, dll);
             if (!adr) {
                 LogMessageA("Unknown symbol: %s:%s", dll, symname);
                 address_tbl[i] = reinterpret_cast<ULONG_PTR>(unknown_symbol_stub);

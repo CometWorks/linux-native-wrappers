@@ -148,14 +148,17 @@ int main()
         CloseHandle(thread);
     }
 
+    // One FLS drain per thread: DLL_THREAD_DETACH runs first (its FlsSetValue
+    // overwrites the existing value without a callback), then the FLS drain
+    // fires once, matching the LdrShutdownThread order.
     if (g_attach_count != 34 || g_detach_count != 34 ||
-        g_disabled_notifications != 0 || g_fls_callbacks != 68 ||
+        g_disabled_notifications != 0 || g_fls_callbacks != 34 ||
         g_tls_attach_count != 34 || g_tls_detach_count != 34 ||
         g_tls_dll_attach_count != 34 || g_tls_dll_detach_count != 34)
         return 10;
 
     if (!FlsSetValue(g_fls_index, reinterpret_cast<PVOID>(0x1234)) ||
-        !FlsFree(g_fls_index) || g_fls_callbacks != 69)
+        !FlsFree(g_fls_index) || g_fls_callbacks != 35)
         return 11;
     if (!TlsFree(tls_image.tls_index))
         return 12;

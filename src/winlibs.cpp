@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cerrno>
@@ -112,21 +113,25 @@ static std::unordered_map<DWORD, pthread_key_t> g_tls_keys;
 static thread_local DWORD g_last_error;
 static constexpr DWORD ERROR_INSUFFICIENT_BUFFER = 122;
 static constexpr size_t MAX_FLS_SLOTS = 1024;
+// FlsGetValue/FlsSetValue are lock-free (on Windows they are a TEB array
+// read); values are atomic because FlsFree nulls other threads' entries.
+// g_fls_mutex covers slot allocation, thread registration, and drains.
 struct fls_slot {
     PFLS_CALLBACK_FUNCTION callback;
-    uint64_t generation;
-    bool allocated;
+    std::atomic<bool> allocated;
 };
 struct fls_thread_state {
-    std::array<void *, MAX_FLS_SLOTS> values{};
-    std::array<uint64_t, MAX_FLS_SLOTS> generations{};
+    std::array<std::atomic<void *>, MAX_FLS_SLOTS> values{};
 };
 static std::mutex g_fls_mutex;
 static std::array<fls_slot, MAX_FLS_SLOTS> g_fls_slots{};
 static std::vector<fls_thread_state *> g_fls_threads;
 static pthread_key_t g_fls_key;
 static pthread_once_t g_fls_key_once = PTHREAD_ONCE_INIT;
-static std::recursive_mutex g_onexit_mutex;
+// Must stay non-recursive: g_onexit_condition.wait() releases exactly one
+// ownership level, so waiting while the mutex is held recursively would
+// deadlock the draining thread.
+static std::mutex g_onexit_mutex;
 static std::condition_variable_any g_onexit_condition;
 static std::unordered_set<_onexit_table_t *> g_executing_onexit_tables;
 static thread_local _onexit_table_t *g_executing_onexit_table;
@@ -143,6 +148,7 @@ static constexpr DWORD MEM_COMMIT = 0x1000;
 static constexpr DWORD MEM_RESERVE = 0x2000;
 static constexpr DWORD MEM_DECOMMIT = 0x4000;
 static constexpr DWORD MEM_RELEASE = 0x8000;
+static constexpr DWORD MEM_TOP_DOWN = 0x100000;
 static constexpr DWORD PAGE_NOACCESS = 0x01;
 static constexpr DWORD PAGE_READONLY = 0x02;
 static constexpr DWORD PAGE_READWRITE = 0x04;
@@ -694,12 +700,12 @@ void winlibs_cleanup_fls_for_current_thread()
             std::lock_guard<std::mutex> lock(g_fls_mutex);
             for (size_t i = 0; i < MAX_FLS_SLOTS; ++i) {
                 auto &slot = g_fls_slots[i];
-                if (!state->values[i] || !slot.allocated ||
-                    state->generations[i] != slot.generation)
+                void *value = state->values[i].load(std::memory_order_relaxed);
+                if (!value || !slot.allocated.load(std::memory_order_relaxed))
                     continue;
                 if (slot.callback)
-                    callbacks.emplace_back(slot.callback, state->values[i]);
-                state->values[i] = nullptr;
+                    callbacks.emplace_back(slot.callback, value);
+                state->values[i].store(nullptr, std::memory_order_relaxed);
             }
         }
         if (callbacks.empty())
@@ -729,11 +735,10 @@ WINAPI DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION callback) {
     std::lock_guard<std::mutex> lock(g_fls_mutex);
     for (DWORD i = 0; i < MAX_FLS_SLOTS; ++i) {
         auto &slot = g_fls_slots[i];
-        if (slot.allocated)
+        if (slot.allocated.load(std::memory_order_relaxed))
             continue;
-        slot.allocated = true;
         slot.callback = callback;
-        ++slot.generation;
+        slot.allocated.store(true, std::memory_order_release);
         return i;
     }
     return 0xffffffffu;
@@ -746,17 +751,15 @@ WINAPI BOOL FlsFree(DWORD index) {
     {
         std::lock_guard<std::mutex> lock(g_fls_mutex);
         auto &slot = g_fls_slots[index];
-        if (!slot.allocated)
+        if (!slot.allocated.exchange(false, std::memory_order_acq_rel))
             return FALSE;
-        for (auto *state : g_fls_threads) {
-            if (!state->values[index] || state->generations[index] != slot.generation)
-                continue;
-            if (slot.callback)
-                callbacks.emplace_back(slot.callback, state->values[index]);
-            state->values[index] = nullptr;
-        }
-        slot.allocated = false;
+        PFLS_CALLBACK_FUNCTION callback = slot.callback;
         slot.callback = nullptr;
+        for (auto *state : g_fls_threads) {
+            void *value = state->values[index].exchange(nullptr, std::memory_order_relaxed);
+            if (value && callback)
+                callbacks.emplace_back(callback, value);
+        }
     }
     for (const auto &callback : callbacks)
         callback.first(callback.second);
@@ -769,12 +772,11 @@ WINAPI BOOL FlsSetValue(DWORD index, LPVOID value) {
     auto *state = get_fls_state();
     if (!state)
         return FALSE;
-    std::lock_guard<std::mutex> lock(g_fls_mutex);
-    auto &slot = g_fls_slots[index];
-    if (!slot.allocated)
+    // Lock-free hot path; racing set against FlsFree of the same slot is a
+    // caller bug, as on Windows.
+    if (!g_fls_slots[index].allocated.load(std::memory_order_acquire))
         return FALSE;
-    state->values[index] = value;
-    state->generations[index] = slot.generation;
+    state->values[index].store(value, std::memory_order_relaxed);
     return TRUE;
 }
 
@@ -784,10 +786,9 @@ WINAPI LPVOID FlsGetValue(DWORD index) {
     auto *state = get_fls_state();
     if (!state)
         return nullptr;
-    std::lock_guard<std::mutex> lock(g_fls_mutex);
-    auto &slot = g_fls_slots[index];
-    return slot.allocated && state->generations[index] == slot.generation
-        ? state->values[index] : nullptr;
+    if (!g_fls_slots[index].allocated.load(std::memory_order_acquire))
+        return nullptr;
+    return state->values[index].load(std::memory_order_relaxed);
 }
 
 WINAPI void GetSystemInfo(void *lpSystemInfo) {
@@ -1227,8 +1228,21 @@ static bool checked_mul_size(size_t left, size_t right, size_t &result)
     return true;
 }
 
+// MSVC's allocator rounds up to 16 bytes and adds its own metadata padding.
+// PE code compiled with MSVC may write slightly past the requested size
+// (within MSVC's padding), which corrupts glibc's heap metadata. Retained per
+// MEMORY.md section 5 until DLL lifecycle and managed integration validation
+// passes; remove in a separate commit afterwards.
+static constexpr size_t ALLOC_PADDING = 256;
+
+static size_t padded_alloc_size(size_t size)
+{
+    size_t padded;
+    return checked_add_size(size, ALLOC_PADDING, padded) ? padded : size;
+}
+
 WINAPI void *crt_malloc(size_t size) {
-    return malloc(size);
+    return malloc(padded_alloc_size(size));
 }
 
 WINAPI int crt__callnewh(size_t size) {
@@ -1596,6 +1610,20 @@ WINAPI void crt__cexit() {
     crt__execute_onexit_table(&g_process_onexit);
 }
 
+static void drain_process_onexit()
+{
+    crt__execute_onexit_table(&g_process_onexit);
+}
+
+// PE code may never call _cexit, so make sure process onexit handlers also run
+// at normal host process exit. Draining twice is safe: execution empties the
+// table.
+static void register_process_onexit_drain()
+{
+    static std::once_flag once;
+    std::call_once(once, [] { std::atexit(drain_process_onexit); });
+}
+
 WINAPI int crt__crt_atexit(_PVFV func) {
     return crt__register_onexit_function(&g_process_onexit,
                                           reinterpret_cast<void *>(func));
@@ -1606,7 +1634,7 @@ WINAPI int crt__execute_onexit_table(void* raw_table) {
         return -1;
     auto *table = static_cast<_onexit_table_t *>(raw_table);
     {
-        std::unique_lock<std::recursive_mutex> lock(g_onexit_mutex);
+        std::unique_lock<std::mutex> lock(g_onexit_mutex);
         if (g_executing_onexit_table == table)
             return 0;
         g_onexit_condition.wait(lock, [table] {
@@ -1619,7 +1647,7 @@ WINAPI int crt__execute_onexit_table(void* raw_table) {
     for (;;) {
         _PVFV callback = nullptr;
         {
-            std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+            std::lock_guard<std::mutex> lock(g_onexit_mutex);
             if (table->_first && table->_last > table->_first)
                 callback = *--table->_last;
             else {
@@ -1633,7 +1661,7 @@ WINAPI int crt__execute_onexit_table(void* raw_table) {
     }
     g_executing_onexit_table = previous_table;
     {
-        std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+        std::lock_guard<std::mutex> lock(g_onexit_mutex);
         g_executing_onexit_tables.erase(table);
     }
     g_onexit_condition.notify_all();
@@ -1643,9 +1671,11 @@ WINAPI int crt__execute_onexit_table(void* raw_table) {
 WINAPI int crt__register_onexit_function(void* raw_table, void* raw_func) {
     if (!raw_table || !raw_func)
         return -1;
+    if (raw_table == &g_process_onexit)
+        register_process_onexit_drain();
     auto *table = static_cast<_onexit_table_t *>(raw_table);
     auto func = reinterpret_cast<_PVFV>(raw_func);
-    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    std::lock_guard<std::mutex> lock(g_onexit_mutex);
     size_t count = table->_first ? static_cast<size_t>(table->_last - table->_first) : 0;
     size_t capacity = table->_first ? static_cast<size_t>(table->_end - table->_first) : 0;
     if (count == capacity) {
@@ -1666,7 +1696,7 @@ WINAPI int crt__initialize_onexit_table(void* raw_table) {
     if (!raw_table)
         return -1;
     auto *table = static_cast<_onexit_table_t *>(raw_table);
-    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    std::lock_guard<std::mutex> lock(g_onexit_mutex);
     if (table->_first || table->_last || table->_end)
         return 0;
     *table = {};
@@ -1817,16 +1847,21 @@ WINAPI FILE *msvcr__wfopen(LPCWSTR filename, LPCWSTR mode) {
 }
 WINAPI float msvcr_powf(float x, float y) { return std::pow(x, y); }
 WINAPI float msvcr_atan2f(float y, float x) { return std::atan2(y, x); }
-WINAPI void msvcr__lock(int locknum) { (void)locknum; g_onexit_mutex.lock(); }
-WINAPI void msvcr__unlock(int locknum) { (void)locknum; g_onexit_mutex.unlock(); }
+// MSVCR lock numbers name independent CRT subsystems (heap, stdio, exit, ...)
+// and behave like recursive critical sections. Keep them off g_onexit_mutex so
+// the onexit condition wait never runs on a recursively held mutex.
+static constexpr unsigned MSVCR_LOCK_COUNT = 64;
+static std::recursive_mutex g_msvcr_locks[MSVCR_LOCK_COUNT];
+WINAPI void msvcr__lock(int locknum) { g_msvcr_locks[static_cast<unsigned>(locknum) % MSVCR_LOCK_COUNT].lock(); }
+WINAPI void msvcr__unlock(int locknum) { g_msvcr_locks[static_cast<unsigned>(locknum) % MSVCR_LOCK_COUNT].unlock(); }
 WINAPI void *msvcr__calloc_crt(size_t count, size_t size) {
     size_t total;
-    return checked_mul_size(count, size, total) ? calloc(1, total) : nullptr;
+    return checked_mul_size(count, size, total) ? calloc(1, padded_alloc_size(total)) : nullptr;
 }
 WINAPI void *msvcr___dllonexit(void *raw_func, void **start, void **end) {
     if (!raw_func || !start || !end)
         return nullptr;
-    std::lock_guard<std::recursive_mutex> lock(g_onexit_mutex);
+    std::lock_guard<std::mutex> lock(g_onexit_mutex);
     auto first = static_cast<_onexit_t *>(*start);
     auto last = static_cast<_onexit_t *>(*end);
     size_t count = first && last >= first ? static_cast<size_t>(last - first) : 0;
@@ -1925,7 +1960,7 @@ WINAPI void *msvcr_realloc(void *memblock, size_t size) {
         crt_free(memblock);
         return nullptr;
     }
-    return realloc(memblock, size);
+    return realloc(memblock, padded_alloc_size(size));
 }
 WINAPI void msvcr__aligned_free(void *memblock) { free(memblock); }
 WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
@@ -1935,7 +1970,7 @@ WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
     }
     alignment = std::max(alignment, size_t{16});
     void *ptr = nullptr;
-    int error = posix_memalign(&ptr, alignment, size);
+    int error = posix_memalign(&ptr, alignment, padded_alloc_size(size));
     if (error)
         errno = error;
     return error ? nullptr : ptr;
@@ -2411,6 +2446,8 @@ WINAPI HANDLE CreateFileA(const char *lpFileName, DWORD dwDesiredAccess, DWORD d
     return fd >= 0 ? reinterpret_cast<HANDLE>(static_cast<intptr_t>(fd + 1)) : INVALID_HANDLE_VALUE;
 }
 WINAPI void *VirtualAlloc(void *lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
+    // Placement hint only; any address satisfies it.
+    flAllocationType &= ~MEM_TOP_DOWN;
     int protection;
     if (!dwSize || (flAllocationType != MEM_RESERVE &&
                     flAllocationType != MEM_COMMIT &&
@@ -2570,8 +2607,12 @@ WINAPI BOOL VirtualFree(void *lpAddress, SIZE_T dwSize, DWORD dwFreeType) {
     }
     void *result = mmap(reinterpret_cast<void *>(start), end - start, PROT_NONE,
                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if (result != reinterpret_cast<void *>(start))
-        std::abort();
+    if (result == MAP_FAILED) {
+        // MAP_FIXED replacement is atomic: on failure (e.g. vm.max_map_count
+        // exhaustion) the old mapping is intact, so this is recoverable.
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return FALSE;
+    }
     return TRUE;
 }
 WINAPI HMODULE LoadLibraryExW(const WCHAR *lpLibFileName, HANDLE hFile, DWORD dwFlags) {
@@ -2672,7 +2713,7 @@ WINAPI int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, const char *lpMulti
 WINAPI HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize) { return reinterpret_cast<HANDLE>(1); }
 WINAPI BOOL HeapDestroy(HANDLE hHeap) { return TRUE; }
 WINAPI void *HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes) {
-    return (dwFlags & 0x08) ? calloc(1, dwBytes) : malloc(dwBytes);
+    return (dwFlags & 0x08) ? calloc(1, padded_alloc_size(dwBytes)) : malloc(padded_alloc_size(dwBytes));
 }
 WINAPI HANDLE GetProcessHeap() { return reinterpret_cast<HANDLE>(1); }
 WINAPI BOOL HeapFree(HANDLE hHeap, DWORD dwFlags, void *lpMem) {

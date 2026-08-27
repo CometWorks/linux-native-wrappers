@@ -463,7 +463,7 @@ void pe_unlock_loader();
 void pe_register_loaded_image_for_test(struct pe_image *image);
 #endif
 
-generic_func get_export(const char *name);
+generic_func get_export(const char *name, const char *dll = nullptr);
 void register_function(const char *dll_name, const char *func_name, generic_func func,
                        struct pe_image *owner = nullptr);
 

@@ -37,6 +37,7 @@ static constexpr DWORD MEM_COMMIT = 0x1000;
 static constexpr DWORD MEM_RESERVE = 0x2000;
 static constexpr DWORD MEM_DECOMMIT = 0x4000;
 static constexpr DWORD MEM_RELEASE = 0x8000;
+static constexpr DWORD MEM_TOP_DOWN = 0x100000;
 static constexpr DWORD PAGE_NOACCESS = 0x01;
 static constexpr DWORD PAGE_READONLY = 0x02;
 static constexpr DWORD PAGE_READWRITE = 0x04;
@@ -237,7 +238,10 @@ static int test_virtual_memory()
     if (VirtualAlloc(nullptr, 0, MEM_RESERVE, PAGE_READWRITE) ||
         GetLastError() != ERROR_INVALID_PARAMETER)
         return 39;
-    if (VirtualAlloc(nullptr, page, MEM_RESERVE | 0x100000, PAGE_READWRITE) ||
+    // MEM_TOP_DOWN is a placement hint Windows accepts with reserve/commit.
+    void *top_down = VirtualAlloc(nullptr, page, MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE);
+    if (!top_down || !VirtualFree(top_down, 0, MEM_RELEASE) ||
+        VirtualAlloc(nullptr, page, MEM_RESERVE | MEM_DECOMMIT, PAGE_READWRITE) ||
         VirtualAlloc(nullptr, page, MEM_RESERVE, 0x104))
         return 40;
     if (VirtualAlloc(reinterpret_cast<void *>(std::numeric_limits<uintptr_t>::max() - page + 1),
