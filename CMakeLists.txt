@@ -183,6 +183,7 @@ target_link_libraries(d3dcompiler_tool PRIVATE D3DCompiler)
 target_compile_options(d3dcompiler_tool PRIVATE -Wall)
 
 set(NATIVE_DLL_DIR "" CACHE PATH "Directory containing the Windows native DLLs")
+set(SE2_NATIVE_DLL_DIR "" CACHE PATH "Directory containing the SE2 Windows native DLLs")
 
 include(CTest)
 if(BUILD_TESTING)
@@ -247,6 +248,16 @@ if(BUILD_TESTING)
         set_tests_properties(havok_memory PROPERTIES
                 TIMEOUT 120
                 FAIL_REGULAR_EXPRESSION "duplicate free suppressed")
+    endif()
+
+    if(SE2_NATIVE_DLL_DIR AND EXISTS "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll")
+        add_executable(physics_init_test tests/physics_init.cpp)
+        target_link_libraries(physics_init_test PRIVATE Physics)
+        add_test(NAME physics_init
+                COMMAND physics_init_test
+                        "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll"
+                        "${CMAKE_BINARY_DIR}/physics-VRage.Physics.Native.dll")
+        set_tests_properties(physics_init PROPERTIES TIMEOUT 120)
     endif()
 endif()
 

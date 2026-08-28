@@ -148,6 +148,9 @@ gdb --args build/havok_crash_test /path/to/SpaceEngineers/Bin64/Havok.dll
 
 The `--trace` form checks the unwind trace and exits normally. Running the same
 program without `--trace` leaves the crash unhandled for GDB or core testing.
+Set `SE2_NATIVE_DLL_DIR=/path/to/SpaceEngineers2/Game2` to also add the Physics
+initialization test.
+
 CI does not set `NATIVE_DLL_DIR`, so these DLL-backed tests are not part of the
 release workflow.
 
