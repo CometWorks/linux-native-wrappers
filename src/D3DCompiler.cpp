@@ -57,6 +57,8 @@ typedef WINAPI uint32_t (*pfnBlobRelease)(void *pThis);
 static pfnD3DCompile s_D3DCompile = nullptr;
 static pfnD3DPreprocess s_D3DPreprocess = nullptr;
 static pfnD3DStripShader s_D3DStripShader = nullptr;
+// The PE-loaded compiler corrupts its state when these entry points overlap.
+static std::mutex s_compilerMutex;
 
 // Helper: read vtable slot from a COM object
 static inline void* vtable_slot(void *obj, int index)
@@ -373,6 +375,7 @@ int32_t SE_D3DPreprocess(
         fprintf(stderr, "D3DCompiler: D3DPreprocess not initialized\n");
         return -1;
     }
+    std::lock_guard<std::mutex> lock(s_compilerMutex);
     return s_D3DPreprocess(pSrcData, SrcDataSize, pSourceName, pDefines, pInclude,
                            ppCodeText, ppErrorMsgs);
 }
@@ -386,6 +389,7 @@ int32_t SE_D3DStripShader(
         fprintf(stderr, "D3DCompiler: D3DStripShader not initialized\n");
         return -1;
     }
+    std::lock_guard<std::mutex> lock(s_compilerMutex);
     return s_D3DStripShader(pShaderBytecode, BytecodeLength, uStripFlags, ppStrippedBlob);
 }
 
@@ -401,6 +405,7 @@ int32_t SE_D3DCompile(
         fprintf(stderr, "D3DCompiler: D3DCompile not initialized\n");
         return -1;
     }
+    std::lock_guard<std::mutex> lock(s_compilerMutex);
     return s_D3DCompile(pSrcData, SrcDataSize, pSourceName, pDefines, pInclude,
                         pEntrypoint, pTarget, Flags1, Flags2, ppCode, ppErrorMsgs);
 }

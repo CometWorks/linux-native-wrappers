@@ -23,6 +23,11 @@ extern BOOL WINAPI GetLogicalProcessorInformationEx(INT, void *, DWORD *);
 extern BOOL WINAPI QueryPerformanceCounter(LARGE_INTEGER *);
 extern BOOL WINAPI QueryPerformanceFrequency(LARGE_INTEGER *);
 extern void WINAPI RaiseException(DWORD, DWORD, DWORD, const ULONG_PTR *);
+extern HANDLE WINAPI HeapCreate(DWORD, SIZE_T, SIZE_T);
+extern BOOL WINAPI HeapDestroy(HANDLE);
+extern void *WINAPI HeapAlloc(HANDLE, DWORD, SIZE_T);
+extern HANDLE WINAPI GetProcessHeap();
+extern BOOL WINAPI HeapFree(HANDLE, DWORD, void *);
 extern int WINAPI crt__initialize_onexit_table(void *);
 extern int WINAPI crt__register_onexit_function(void *, void *);
 extern int WINAPI crt__execute_onexit_table(void *);
@@ -304,6 +309,38 @@ static int test_virtual_memory()
     return 0;
 }
 
+static int test_heaps()
+{
+    HANDLE process = GetProcessHeap();
+    HANDLE first = HeapCreate(0, 0, 0);
+    HANDLE second = HeapCreate(0, 0, 0);
+    if (!process || !first || !second || first == second || first == process || second == process)
+        return 13;
+
+    auto *zeroed = static_cast<unsigned char *>(HeapAlloc(first, 0x08, 32));
+    void *allocation = HeapAlloc(first, 0, 32);
+    if (!zeroed || !allocation)
+        return 14;
+    for (size_t i = 0; i < 32; ++i)
+        if (zeroed[i])
+            return 15;
+
+    if (HeapFree(second, 0, allocation) || !HeapFree(first, 0, allocation) ||
+        HeapFree(first, 0, allocation))
+        return 16;
+
+    void *process_allocation = HeapAlloc(process, 0, 16);
+    if (!process_allocation || !HeapFree(process, 0, process_allocation) || HeapDestroy(process))
+        return 17;
+
+    if (!HeapAlloc(first, 0, 64) || !HeapAlloc(first, 0, 128) || !HeapDestroy(first))
+        return 18;
+    if (HeapAlloc(first, 0, 16) || HeapFree(first, 0, zeroed) || HeapDestroy(first) ||
+        !HeapDestroy(second))
+        return 19;
+    return 0;
+}
+
 static std::vector<int> g_exit_order;
 static _onexit_table_t *g_active_exit_table;
 
@@ -406,6 +443,9 @@ int main()
     static_assert(sizeof(BOOL) == 4);
     static_assert(sizeof(BOOLEAN) == 1);
     int result = test_allocators();
+    if (result)
+        return result;
+    result = test_heaps();
     if (result)
         return result;
     result = test_virtual_memory();
