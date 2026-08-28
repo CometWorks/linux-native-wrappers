@@ -10,7 +10,7 @@
 
 // Top-level SEH handler installed for loaded DLLs.
 // Aborts on any unhandled exception from PE code.
-static EXCEPTION_DISPOSITION ExceptionHandler(
+static WINAPI EXCEPTION_DISPOSITION ExceptionHandler(
     _EXCEPTION_RECORD *ExceptionRecord,
     _EXCEPTION_FRAME *EstablisherFrame,
     PVOID *ContextRecord,
@@ -22,6 +22,11 @@ static EXCEPTION_DISPOSITION ExceptionHandler(
 
 bool load_dll(pe_image *image, const char *name, const char *sidecar_path)
 {
+    pe_lock_loader();
+    struct loader_guard {
+        ~loader_guard() { pe_unlock_loader(); }
+    } guard;
+
     if (!parseCPUInfo()) {
         LogMessage("Cannot parse CPU info");
         return false;
@@ -35,12 +40,28 @@ bool load_dll(pe_image *image, const char *name, const char *sidecar_path)
         return false;
     }
 
-    if (link_pe_images(image, 1) ||
-        !setup_nt_threadinfo(&ExceptionHandler) ||
-        !pe_initialize_tls_for_current_thread(image, DLL_PROCESS_ATTACH))
+    if (link_pe_images(image, 1)) {
+        pe_discard_image(image);
         return false;
+    }
 
-    // 0x0d110001 is a sentinel fake HINSTANCE
-    bool loaded = !image->entry || image->entry((PVOID)0x0d110001, DLL_PROCESS_ATTACH, nullptr);
-    return loaded;
+    if (!setup_nt_threadinfo(&ExceptionHandler)) {
+        pe_discard_image(image);
+        return false;
+    }
+    if (!pe_begin_process_attach(image)) {
+        pe_discard_image(image);
+        return false;
+    }
+    if (!pe_initialize_tls_for_current_thread(image, DLL_PROCESS_ATTACH)) {
+        pe_finish_process_attach(image, false, false);
+        pe_discard_image(image);
+        return false;
+    }
+
+    bool loaded = !image->entry || image->entry(image->image, DLL_PROCESS_ATTACH, nullptr);
+    bool finished = pe_finish_process_attach(image, loaded, true);
+    if (!loaded || !finished)
+        pe_discard_image(image);
+    return finished && loaded;
 }

@@ -431,6 +431,8 @@ struct pe_image {
     PVOID tls_directory;
     size_t tls_data_size;
     size_t tls_total_size;
+    bool registered;
+    bool thread_notifications_disabled;
 };
 
 // RVA (Relative Virtual Address) to VA (Virtual Address) conversion
@@ -448,13 +450,22 @@ bool pe_initialize_tls_for_current_thread(struct pe_image *pe, DWORD reason);
 void pe_initialize_tls_for_loaded_images(DWORD reason);
 void pe_notify_loaded_images(DWORD reason);
 void pe_ensure_tls_for_loaded_images();
+void pe_cleanup_current_thread();
+bool pe_disable_thread_library_calls(HMODULE module);
+bool pe_begin_process_attach(struct pe_image *image);
+bool pe_finish_process_attach(struct pe_image *image, bool attached, bool entry_called);
+void pe_discard_image_exports(struct pe_image *image);
+void pe_discard_image(struct pe_image *image);
+void pe_lock_loader();
+void pe_unlock_loader();
 
 #ifdef NATIVE_WRAPPERS_TESTING
 void pe_register_loaded_image_for_test(struct pe_image *image);
 #endif
 
-generic_func get_export(const char *name);
-void register_function(const char *dll_name, const char *func_name, generic_func func);
+generic_func get_export(const char *name, const char *dll = nullptr);
+void register_function(const char *dll_name, const char *func_name, generic_func func,
+                       struct pe_image *owner = nullptr);
 
 bool setup_nt_threadinfo(PEXCEPTION_HANDLER handler);
 bool setup_kuser_shared_data();

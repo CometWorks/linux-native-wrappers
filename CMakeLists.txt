@@ -183,6 +183,7 @@ target_link_libraries(d3dcompiler_tool PRIVATE D3DCompiler)
 target_compile_options(d3dcompiler_tool PRIVATE -Wall)
 
 set(NATIVE_DLL_DIR "" CACHE PATH "Directory containing the Windows native DLLs")
+set(SE2_NATIVE_DLL_DIR "" CACHE PATH "Directory containing the SE2 Windows native DLLs")
 
 include(CTest)
 if(BUILD_TESTING)
@@ -206,6 +207,17 @@ if(BUILD_TESTING)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
 
+    add_executable(windows_memory_test
+            ${SOURCES}
+            tests/windows_memory.cpp
+    )
+    target_link_libraries(windows_memory_test PRIVATE c ${CMAKE_DL_LIBS})
+    target_compile_options(windows_memory_test PRIVATE -Wall -fpermissive)
+    add_test(NAME windows_memory COMMAND windows_memory_test)
+    set_tests_properties(windows_memory PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "ASAN_OPTIONS=allocator_may_return_null=1:handle_segv=0")
+
     if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
         add_test(NAME d3dcompiler_preprocess
                 COMMAND ${PYTHON3_EXECUTABLE}
@@ -226,6 +238,26 @@ if(BUILD_TESTING)
                 COMMAND havok_crash_test "${NATIVE_DLL_DIR}/Havok.dll" --trace)
         set_tests_properties(havok_unwind PROPERTIES
                 PASS_REGULAR_EXPRESSION "HkShape_CastRayCollectSingleHit")
+
+        add_executable(havok_memory_test tests/havok_memory.cpp)
+        target_link_libraries(havok_memory_test PRIVATE Havok)
+        add_test(NAME havok_memory
+                COMMAND havok_memory_test
+                        "${NATIVE_DLL_DIR}/Havok.dll"
+                        "${CMAKE_BINARY_DIR}/havok-memory-Havok.dll")
+        set_tests_properties(havok_memory PROPERTIES
+                TIMEOUT 120
+                FAIL_REGULAR_EXPRESSION "duplicate free suppressed")
+    endif()
+
+    if(SE2_NATIVE_DLL_DIR AND EXISTS "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll")
+        add_executable(physics_init_test tests/physics_init.cpp)
+        target_link_libraries(physics_init_test PRIVATE Physics)
+        add_test(NAME physics_init
+                COMMAND physics_init_test
+                        "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll"
+                        "${CMAKE_BINARY_DIR}/physics-VRage.Physics.Native.dll")
+        set_tests_properties(physics_init PROPERTIES TIMEOUT 120)
     endif()
 endif()
 

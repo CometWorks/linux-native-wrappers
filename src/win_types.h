@@ -26,7 +26,10 @@
 
 // Primitive types
 
-typedef uint8_t  BOOLEAN, BOOL, *PBOOL, UBYTE;
+typedef uint8_t  BOOLEAN, UBYTE;
+typedef int32_t  BOOL, *PBOOL;
+static_assert(sizeof(BOOLEAN) == 1);
+static_assert(sizeof(BOOL) == 4);
 typedef void    *PVOID, *LPVOID;
 typedef const void *LPCVOID;
 typedef uint8_t  BYTE, *PBYTE, *LPBYTE;
@@ -193,7 +196,69 @@ typedef union _RTL_RUN_ONCE {
 
 // FLS callback
 
-typedef void (*PFLS_CALLBACK_FUNCTION)(PVOID lpFlsData);
+typedef void (WINAPI *PFLS_CALLBACK_FUNCTION)(PVOID lpFlsData);
+
+// Processor topology
+
+typedef enum _LOGICAL_PROCESSOR_RELATIONSHIP {
+    RelationProcessorCore = 0,
+    RelationNumaNode = 1,
+    RelationCache = 2,
+    RelationProcessorPackage = 3,
+    RelationGroup = 4,
+    RelationAll = 0xffff
+} LOGICAL_PROCESSOR_RELATIONSHIP;
+
+#define LTP_PC_SMT 0x1
+
+typedef struct _GROUP_AFFINITY {
+    KAFFINITY Mask;
+    WORD Group;
+    WORD Reserved[3];
+} GROUP_AFFINITY, *PGROUP_AFFINITY;
+
+typedef struct _PROCESSOR_RELATIONSHIP {
+    BYTE Flags;
+    BYTE EfficiencyClass;
+    BYTE Reserved[20];
+    WORD GroupCount;
+    GROUP_AFFINITY GroupMask[1];
+} PROCESSOR_RELATIONSHIP, *PPROCESSOR_RELATIONSHIP;
+
+typedef struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION {
+    ULONG_PTR ProcessorMask;
+    LOGICAL_PROCESSOR_RELATIONSHIP Relationship;
+    union {
+        struct { BYTE Flags; } ProcessorCore;
+        struct { DWORD NodeNumber; } NumaNode;
+        ULONGLONG Reserved[2];
+    } DUMMYUNIONNAME;
+} SYSTEM_LOGICAL_PROCESSOR_INFORMATION, *PSYSTEM_LOGICAL_PROCESSOR_INFORMATION;
+
+typedef struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX {
+    LOGICAL_PROCESSOR_RELATIONSHIP Relationship;
+    DWORD Size;
+    union {
+        PROCESSOR_RELATIONSHIP Processor;
+    } DUMMYUNIONNAME;
+} SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, *PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX;
+
+static_assert(sizeof(GROUP_AFFINITY) == 16);
+static_assert(sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) == 32);
+static_assert(offsetof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION, Relationship) == 8);
+static_assert(offsetof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION, DUMMYUNIONNAME) == 16);
+static_assert(sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX) == 48);
+
+// CRT termination callbacks
+
+typedef void (WINAPI *_PVFV)(void);
+typedef int (WINAPI *_onexit_t)(void);
+
+typedef struct _onexit_table_t {
+    _PVFV *_first;
+    _PVFV *_last;
+    _PVFV *_end;
+} _onexit_table_t;
 
 // Critical section (POSIX-backed)
 
@@ -287,7 +352,8 @@ typedef struct _EXCEPTION_RECORD {
     DWORD ExceptionFlags;
     struct _EXCEPTION_RECORD *ExceptionRecord;
     PVOID ExceptionAddress;
-    long NumberParameters;
+    DWORD NumberParameters;
+    DWORD __unusedAlignment;
     ULONG_PTR ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
 } EXCEPTION_RECORD, *PEXCEPTION_RECORD;
 
@@ -402,7 +468,7 @@ typedef struct _CONTEXT {
 
 struct _EXCEPTION_FRAME;
 
-typedef EXCEPTION_DISPOSITION (*PEXCEPTION_HANDLER)(
+typedef EXCEPTION_DISPOSITION (WINAPI *PEXCEPTION_HANDLER)(
     struct _EXCEPTION_RECORD *ExceptionRecord,
     struct _EXCEPTION_FRAME *EstablisherFrame,
     PVOID *ContextRecord,
