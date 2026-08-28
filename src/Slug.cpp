@@ -1,20 +1,19 @@
 #include <cstdlib>
 #include <mutex>
 #include <stdexcept>
-#include <string>
 
 #include "dll_loader.h"
 
 namespace {
 pe_image slug_image;
 std::mutex slug_mutex;
-std::string slug_path;
 
 void initialize(const char *dll_path, const char *sidecar_path);
 
 void ensure_thread_info()
 {
-    initialize(nullptr, nullptr);
+    if (!slug_image.image)
+        throw std::runtime_error("Slug is not initialized; call Init first");
     if (!setup_nt_threadinfo(nullptr))
         std::abort();
     pe_ensure_tls_for_loaded_images();
@@ -66,17 +65,9 @@ void initialize(const char *dll_path, const char *sidecar_path)
     if (slug_image.image)
         return;
 
-    if (dll_path) {
-        slug_path = dll_path;
-    } else {
-        // Playback loads exports directly; deployed wrappers receive the path through Init.
-        const char *home = std::getenv("HOME");
-        if (!home)
-            throw std::runtime_error("HOME is not set; call Init with the Slug DLL path");
-        slug_path = std::string(home) + "/Documents/Se2-Game2/VRage.Slug.Native.dll";
-    }
-
-    if (!load_dll(&slug_image, slug_path.c_str(), sidecar_path))
+    if (!dll_path)
+        throw std::invalid_argument("Slug Init requires a DLL path");
+    if (!load_dll(&slug_image, dll_path, sidecar_path))
         throw std::runtime_error("Failed to load VRage.Slug.Native.dll");
 
     set_default_layout_data = load_export<SetDefaultLayoutDataFunction>("?SetDefaultLayoutData@Slug@Terathon@@YAXPEAULayoutData@12@@Z");

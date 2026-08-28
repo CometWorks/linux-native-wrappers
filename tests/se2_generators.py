@@ -78,3 +78,7 @@ assert "alignas(16) Vector3I result;" in voxels_source
 assert "Voxels Init requires a DLL path" in voxels_source
 assert "sysv_assertion_callback = nullptr;" in voxels_source
 assert "Documents/" not in voxels_source
+
+slug_source = (root / "src" / "Slug.cpp").read_text(encoding="utf-8")
+assert "Slug Init requires a DLL path" in slug_source
+assert 'getenv("HOME")' not in slug_source
