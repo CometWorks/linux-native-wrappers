@@ -9,8 +9,8 @@
 #   dist/se2-native-wrappers.debug.tar.gz   SE2, Debug   (-O0 -g)
 #
 # Each archive holds only the libraries its game version loads, at the archive
-# root, with no subdirectory. The build workflow runs this script, so a locally
-# produced archive matches the published one.
+# root, with no subdirectory. The build workflow runs this script, so local and
+# published archives have the same names and layout.
 #
 # Release is built and packaged first, Debug second. Each configuration starts
 # from `make clean`, so build/ is left holding the Debug libraries: local

@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <stdexcept>
 
 #include "dll_loader.h"
@@ -19,11 +18,6 @@ if (!p##func) { \
         fprintf(stderr, "Failed to load function: " #func "\n"); \
         throw std::runtime_error("Failed to load function: " #func); \
     } \
-}
-
-static void LogMessage(const char *text)
-{
-    std::ofstream("/tmp/ds.txt", std::ios::app) << text << "\n";
 }
 
 static void EnsureThreadInfo()
@@ -92,7 +86,7 @@ void Init(const char* dllPath, const char* sidecarPath)
     }
 
     if (!load_dll(&g_recast_image, dllPath, sidecarPath)) {
-        LogMessage("Failed to load RecastDetour.dll");
+        fprintf(stderr, "Failed to load RecastDetour.dll\n");
         throw std::runtime_error("Failed to load RecastDetour.dll");
     }
 

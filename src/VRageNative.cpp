@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <stdexcept>
 
 #include "dll_loader.h"
@@ -19,11 +18,6 @@ if (!p##func) { \
         fprintf(stderr, "Failed to load function: " #func "\n"); \
         throw std::runtime_error("Failed to load function: " #func); \
     } \
-}
-
-static void LogMessage(const char *text)
-{
-    std::ofstream("/tmp/ds.txt", std::ios::app) << text << "\n";
 }
 
 static void EnsureThreadInfo()
@@ -318,7 +312,7 @@ DECLARE_FUNCTION_POINTER(VrVoxelMesh_Clear)
 static void InitImpl(const char* dllPath, const char* sidecarPath)
 {
     if (!load_dll(&g_vrage_native_image, dllPath, sidecarPath)) {
-        LogMessage("Failed to load VRage.Native.dll");
+        fprintf(stderr, "Failed to load VRage.Native.dll\n");
         throw std::runtime_error("Failed to load VRage.Native.dll");
     }
 

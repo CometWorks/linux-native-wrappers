@@ -18,17 +18,6 @@ set(SOURCES
 # Include directories
 include_directories(src)
 
-# Add executable
-add_executable(
-        ${PROJECT_NAME}
-        ${SOURCES}
-        src/main.cpp
-)
-
-set_target_properties(${PROJECT_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
-
 # Wrapper libraries
 add_library(
         RecastDetour
@@ -133,7 +122,6 @@ set_target_properties(Voxels PROPERTIES
 )
 
 # Link libraries (if any)
-target_link_libraries(${PROJECT_NAME} PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
@@ -155,7 +143,6 @@ target_link_libraries(Voxels PRIVATE c ${CMAKE_DL_LIBS})
 
 # Compiler flags
 #-Werror -Wextra
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -fpermissive)
 target_compile_options(RecastDetour PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(Havok PRIVATE -Wall -fpermissive -fPIC)
 target_compile_options(VRageNative PRIVATE -Wall -fpermissive -fPIC)
@@ -182,8 +169,8 @@ add_executable(d3dcompiler_tool
 target_link_libraries(d3dcompiler_tool PRIVATE D3DCompiler)
 target_compile_options(d3dcompiler_tool PRIVATE -Wall)
 
-set(NATIVE_DLL_DIR "" CACHE PATH "Directory containing the Windows native DLLs")
-set(SE2_NATIVE_DLL_DIR "" CACHE PATH "Directory containing the SE2 Windows native DLLs")
+set(BIN64 "" CACHE PATH "Space Engineers 1 Bin64 directory")
+set(GAME2 "" CACHE PATH "Space Engineers 2 Game2 directory")
 
 include(CTest)
 if(BUILD_TESTING)
@@ -218,24 +205,32 @@ if(BUILD_TESTING)
             TIMEOUT 60
             ENVIRONMENT "ASAN_OPTIONS=allocator_may_return_null=1:handle_segv=0")
 
-    if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
+    if(BIN64 AND EXISTS "${BIN64}/d3dcompiler_47.dll")
         add_test(NAME d3dcompiler_preprocess
                 COMMAND ${PYTHON3_EXECUTABLE}
                         ${CMAKE_SOURCE_DIR}/tests/d3dcompiler_preprocess.py
                         "$<TARGET_FILE:d3dcompiler_tool>"
-                        "${NATIVE_DLL_DIR}/d3dcompiler_47.dll")
+                        "${BIN64}/d3dcompiler_47.dll")
         set_tests_properties(d3dcompiler_preprocess PROPERTIES TIMEOUT 60)
     endif()
 
-    if(NATIVE_DLL_DIR AND EXISTS "${NATIVE_DLL_DIR}/Havok.dll")
+    if(BIN64 AND EXISTS "${BIN64}/RecastDetour.dll")
+        add_executable(recast_detour_test tests/recast_detour.cpp)
+        target_link_libraries(recast_detour_test PRIVATE RecastDetour)
+        add_test(NAME recast_detour
+                COMMAND recast_detour_test "${BIN64}/RecastDetour.dll")
+        set_tests_properties(recast_detour PROPERTIES TIMEOUT 120)
+    endif()
+
+    if(BIN64 AND EXISTS "${BIN64}/Havok.dll")
         add_test(NAME pe_sidecar_generation
                 COMMAND generate_pe_sidecar
-                        "${NATIVE_DLL_DIR}/Havok.dll"
+                        "${BIN64}/Havok.dll"
                         "${CMAKE_BINARY_DIR}/generated-Havok.dll")
         add_executable(havok_crash_test tests/havok_crash.cpp)
         target_link_libraries(havok_crash_test PRIVATE Havok)
         add_test(NAME havok_unwind
-                COMMAND havok_crash_test "${NATIVE_DLL_DIR}/Havok.dll" --trace)
+                COMMAND havok_crash_test "${BIN64}/Havok.dll" --trace)
         set_tests_properties(havok_unwind PROPERTIES
                 PASS_REGULAR_EXPRESSION "HkShape_CastRayCollectSingleHit")
 
@@ -243,23 +238,20 @@ if(BUILD_TESTING)
         target_link_libraries(havok_memory_test PRIVATE Havok)
         add_test(NAME havok_memory
                 COMMAND havok_memory_test
-                        "${NATIVE_DLL_DIR}/Havok.dll"
+                        "${BIN64}/Havok.dll"
                         "${CMAKE_BINARY_DIR}/havok-memory-Havok.dll")
         set_tests_properties(havok_memory PROPERTIES
                 TIMEOUT 120
                 FAIL_REGULAR_EXPRESSION "duplicate free suppressed")
     endif()
 
-    if(SE2_NATIVE_DLL_DIR AND EXISTS "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll")
+    if(GAME2 AND EXISTS "${GAME2}/VRage.Physics.Native.dll")
         add_executable(physics_init_test tests/physics_init.cpp)
         target_link_libraries(physics_init_test PRIVATE Physics)
         add_test(NAME physics_init
                 COMMAND physics_init_test
-                        "${SE2_NATIVE_DLL_DIR}/VRage.Physics.Native.dll"
+                        "${GAME2}/VRage.Physics.Native.dll"
                         "${CMAKE_BINARY_DIR}/physics-VRage.Physics.Native.dll")
         set_tests_properties(physics_init PROPERTIES TIMEOUT 120)
     endif()
 endif()
-
-# Install target (optional)
-#install(TARGETS ${PROJECT_NAME} DESTINATION bin)

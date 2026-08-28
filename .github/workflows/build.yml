@@ -8,16 +8,16 @@ name: Build
 #   * push to main        -> build, then publish a PUBLIC release tagged
 #                            v1.0.<run_number> and marked "latest". All four
 #                            tar.gz assets are attached.
-#   * push to a (non-draft)
-#     pull request         -> build, then publish a DRAFT release (not public,
-#                            not "latest", no git tag is created until/unless a
-#                            maintainer publishes it). Same assets otherwise.
+#   * non-draft pull request activity
+#                          -> build, then publish a DRAFT release (not public,
+#                             not "latest", no git tag is created until/unless a
+#                             maintainer publishes it). Same assets otherwise.
 #   * draft pull requests  -> skipped entirely (no build, no release).
 #
 # Building, testing and packaging are done by ./build_and_package.sh, the same
-# script used for local builds, so a locally produced archive matches the
-# published one. It builds and tests the Release and Debug configurations and
-# writes four archives under dist/ — one per game and configuration:
+# script used for local builds. Local and published archives have the same names
+# and layout. It builds and tests the Release and Debug configurations and
+# writes four archives under dist/, one per game and configuration:
 #
 #   * Release (-O3 -DNDEBUG) -> se1-native-wrappers.tar.gz         (primary)
 #                               se2-native-wrappers.tar.gz         (primary)
