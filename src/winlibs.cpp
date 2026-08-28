@@ -11,6 +11,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <new>
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
@@ -138,6 +139,13 @@ static thread_local _onexit_table_t *g_executing_onexit_table;
 static _onexit_table_t g_process_onexit{};
 static std::mutex g_virtual_memory_mutex;
 static std::map<uintptr_t, size_t> g_virtual_reservations;
+struct windows_heap {
+    std::unordered_set<void *> allocations;
+};
+// ponytail: one registry lock is enough; split it per heap only if profiling shows contention.
+static std::mutex g_heap_mutex;
+static windows_heap g_process_heap;
+static std::unordered_set<windows_heap *> g_private_heaps;
 static std::once_flag g_ntsync_init_once;
 static int g_ntsync_fd = -1;
 
@@ -2710,13 +2718,79 @@ WINAPI int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, const char *lpMulti
     for (int i = 0; i < copy; i++) lpWideCharStr[i] = static_cast<WCHAR>(static_cast<unsigned char>(lpMultiByteStr[i]));
     return copy;
 }
-WINAPI HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize) { return reinterpret_cast<HANDLE>(1); }
-WINAPI BOOL HeapDestroy(HANDLE hHeap) { return TRUE; }
-WINAPI void *HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes) {
-    return (dwFlags & 0x08) ? calloc(1, padded_alloc_size(dwBytes)) : malloc(padded_alloc_size(dwBytes));
+static windows_heap *find_windows_heap(HANDLE handle)
+{
+    auto *heap = static_cast<windows_heap *>(handle);
+    return heap == &g_process_heap || g_private_heaps.count(heap) ? heap : nullptr;
 }
-WINAPI HANDLE GetProcessHeap() { return reinterpret_cast<HANDLE>(1); }
+
+WINAPI HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize) {
+    (void)flOptions;
+    (void)dwInitialSize;
+    (void)dwMaximumSize;
+
+    auto *heap = new (std::nothrow) windows_heap();
+    if (!heap) {
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(g_heap_mutex);
+        g_private_heaps.insert(heap);
+    } catch (const std::bad_alloc &) {
+        delete heap;
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+    return heap;
+}
+WINAPI BOOL HeapDestroy(HANDLE hHeap) {
+    std::lock_guard<std::mutex> lock(g_heap_mutex);
+    auto *heap = static_cast<windows_heap *>(hHeap);
+    if (!heap || heap == &g_process_heap || !g_private_heaps.erase(heap)) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return FALSE;
+    }
+    for (void *allocation : heap->allocations)
+        free(allocation);
+    delete heap;
+    return TRUE;
+}
+WINAPI void *HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes) {
+    std::lock_guard<std::mutex> lock(g_heap_mutex);
+    windows_heap *heap = find_windows_heap(hHeap);
+    if (!heap) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return nullptr;
+    }
+
+    void *allocation = (dwFlags & 0x08)
+        ? calloc(1, padded_alloc_size(dwBytes))
+        : malloc(padded_alloc_size(dwBytes));
+    if (!allocation) {
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+
+    try {
+        heap->allocations.insert(allocation);
+    } catch (const std::bad_alloc &) {
+        free(allocation);
+        g_last_error = ERROR_NOT_ENOUGH_MEMORY;
+        return nullptr;
+    }
+    return allocation;
+}
+WINAPI HANDLE GetProcessHeap() { return &g_process_heap; }
 WINAPI BOOL HeapFree(HANDLE hHeap, DWORD dwFlags, void *lpMem) {
+    (void)dwFlags;
+    std::lock_guard<std::mutex> lock(g_heap_mutex);
+    windows_heap *heap = find_windows_heap(hHeap);
+    if (!heap || !lpMem || !heap->allocations.erase(lpMem)) {
+        g_last_error = ERROR_INVALID_PARAMETER;
+        return FALSE;
+    }
     free(lpMem);
     return TRUE;
 }

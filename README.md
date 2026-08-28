@@ -126,7 +126,7 @@ A normal build has four self-contained tests:
 | `se1_generators` | SE1 generator callback patterns and committed source markers |
 | `se2_generators` | SE2 generators with synthetic C# declarations |
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
-| `windows_memory` | CRT allocation, virtual memory, processor topology, timers, exit handlers, and exception failure paths |
+| `windows_memory` | Windows memory and runtime behavior |
 
 Run them with:
 
