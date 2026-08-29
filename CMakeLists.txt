@@ -212,6 +212,13 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:d3dcompiler_tool>"
                         "${BIN64}/d3dcompiler_47.dll")
         set_tests_properties(d3dcompiler_preprocess PROPERTIES TIMEOUT 60)
+
+        add_test(NAME d3dcompiler_diagnostics
+                COMMAND ${PYTHON3_EXECUTABLE}
+                        ${CMAKE_SOURCE_DIR}/tests/d3dcompiler_diagnostics.py
+                        "$<TARGET_FILE:d3dcompiler_tool>"
+                        "${BIN64}/d3dcompiler_47.dll")
+        set_tests_properties(d3dcompiler_diagnostics PROPERTIES TIMEOUT 60)
     endif()
 
     if(BIN64 AND EXISTS "${BIN64}/RecastDetour.dll")
