@@ -1416,11 +1416,32 @@ static int format_from_ms_va_list(char *buffer, size_t buffer_count, const char 
         int dynamic_precision = precision_from_args ? static_cast<int>(read_ms_va_arg<uint64_t>(args)) : 0;
 
         std::string native_format = "%" + flags + width + precision;
+
+        // Anything narrower than a full slot leaves the upper bits of that
+        // slot undefined, so the value has to be cut down to the width the
+        // length modifier implies before it is widened again for the native
+        // printf. Note Windows `long` is 32 bits wide, unlike here.
+        int integer_bits = 32;
+        if (length == "hh") {
+            integer_bits = 8;
+        } else if (length == "h") {
+            integer_bits = 16;
+        } else if (length == "ll" || length == "I64" || length == "I" || length == "j" ||
+                   length == "z" || length == "t" || length == "L") {
+            integer_bits = 64;
+        }
+
         auto append_integer = [&](bool is_signed) {
-            native_format += is_signed ? "ll" : "ll";
+            native_format += "ll";
             native_format.push_back(spec);
+            uint64_t slot = read_ms_va_arg<uint64_t>(args);
+            if (integer_bits < 64) {
+                const uint64_t mask = (uint64_t{1} << integer_bits) - 1;
+                const bool negative = is_signed && (slot & (uint64_t{1} << (integer_bits - 1))) != 0;
+                slot = negative ? (slot | ~mask) : (slot & mask);
+            }
             if (is_signed) {
-                long long value = static_cast<long long>(read_ms_va_arg<uint64_t>(args));
+                long long value = static_cast<long long>(slot);
                 if (width_from_args && precision_from_args) {
                     append_output_format(buffer, buffer_count, written, native_format, dynamic_width, dynamic_precision, value);
                 } else if (width_from_args) {
@@ -1431,7 +1452,7 @@ static int format_from_ms_va_list(char *buffer, size_t buffer_count, const char 
                     append_output_format(buffer, buffer_count, written, native_format, value);
                 }
             } else {
-                unsigned long long value = read_ms_va_arg<uint64_t>(args);
+                unsigned long long value = slot;
                 if (width_from_args && precision_from_args) {
                     append_output_format(buffer, buffer_count, written, native_format, dynamic_width, dynamic_precision, value);
                 } else if (width_from_args) {
