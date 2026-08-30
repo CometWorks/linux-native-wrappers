@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <vector>
+#include <xmmintrin.h>
 
 #include "pe_loader.h"
 #include "pe_sidecar.h"
@@ -1031,11 +1032,41 @@ bool pe_unload_library(pe_image &pe)
 // Thread environment setup
 // ---------------------------------------------------------------------------
 
+// Windows-parity FP state: the game's native modules run with FTZ+DAZ
+// (flush-to-zero, denormals-are-zero) set in MXCSR on Windows. Havok's
+// rsqrtps-based vector normalization depends on DAZ: rsqrtps flushes a
+// denormal input to zero (yielding +/-inf) while the zero-length guard
+// honors denormals as non-zero unless DAZ is set, so a denormal-length
+// vector normalizes to +/-inf instead of taking the zero-length fallback
+// (defect L3: -inf in hkMotionState::m_deltaAngle.w wraps the broad-phase
+// endpoint past the sweep sentinel and the sort walk runs off the array).
+// SE_PE_FTZ=0 restores the raw Linux default for diagnostics.
+static bool ftz_daz_enabled()
+{
+    static const bool enabled = [] {
+        const char *value = getenv("SE_PE_FTZ");
+        return !(value && value[0] == '0');
+    }();
+    return enabled;
+}
+
+static inline void apply_windows_fpu_state()
+{
+    if (!ftz_daz_enabled())
+        return;
+    constexpr unsigned int FtzDaz = 0x8040;  // MXCSR FTZ | DAZ
+    unsigned int csr = _mm_getcsr();
+    if ((csr & FtzDaz) != FtzDaz)
+        _mm_setcsr(csr | FtzDaz);
+}
+
 bool setup_nt_threadinfo(PEXCEPTION_HANDLER handler)
 {
     static PEB ProcessEnvironmentBlock = {
         .TlsBitmap = &TlsBitmap,
     };
+
+    apply_windows_fpu_state();
 
     auto *ctx = get_nt_thread_context();
     if (!ctx) {
