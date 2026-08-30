@@ -248,23 +248,53 @@ static int get_ntsync_fd()
     return g_ntsync_fd;
 }
 
+// Absolute deadline for a relative Windows timeout, on the given clock.
+static timespec abstime_after_ms(clockid_t clock, DWORD timeout_ms)
+{
+    timespec ts{};
+    clock_gettime(clock, &ts);
+    ts.tv_sec += timeout_ms / 1000;
+    ts.tv_nsec += static_cast<long>(timeout_ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= 1000000000L;
+    }
+    return ts;
+}
+
 static bool ntsync_wait_single(int obj_fd, DWORD timeout_ms)
 {
     uint32_t obj = static_cast<uint32_t>(obj_fd);
     ntsync_wait_args args{};
-    args.timeout = timeout_ms == 0 ? 0 : UINT64_MAX;
+    if (timeout_ms == 0) {
+        args.timeout = 0;
+    } else if (timeout_ms == 0xffffffffu) {
+        args.timeout = UINT64_MAX;
+    } else {
+        // ntsync timeouts are absolute against CLOCK_MONOTONIC.
+        timespec deadline = abstime_after_ms(CLOCK_MONOTONIC, timeout_ms);
+        args.timeout = static_cast<uint64_t>(deadline.tv_sec) * 1000000000ull +
+                       static_cast<uint64_t>(deadline.tv_nsec);
+    }
     args.objs = reinterpret_cast<uint64_t>(&obj);
     args.count = 1;
     args.owner = 0;
-    int ret = ioctl(get_ntsync_fd(), NTSYNC_IOC_WAIT_ANY, &args);
-    if (ret == 0) {
-        return true;
-    }
-    if (errno == ETIMEDOUT) {
+    for (;;) {
+        int ret = ioctl(get_ntsync_fd(), NTSYNC_IOC_WAIT_ANY, &args);
+        if (ret == 0) {
+            return true;
+        }
+        if (errno == EINTR) {
+            // Signals (e.g. the .NET GC suspending threads) interrupt the
+            // ioctl. Windows waits never return early for this; retry with
+            // the same absolute deadline.
+            continue;
+        }
+        if (errno != ETIMEDOUT) {
+            fprintf(stderr, "ntsync wait failed: %s\n", strerror(errno));
+        }
         return false;
     }
-    fprintf(stderr, "ntsync wait failed: %s\n", strerror(errno));
-    return false;
 }
 
 static win_handle *make_handle(handle_kind kind, void *payload) {
@@ -441,7 +471,7 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
     auto *handle = static_cast<win_handle *>(hHandle);
     if (handle->kind == handle_kind::event_handle) {
         auto *event = static_cast<event_handle_data *>(handle->payload);
-        if (event->ntsync_fd >= 0 && (dwMilliseconds == 0 || dwMilliseconds == 0xffffffffu)) {
+        if (event->ntsync_fd >= 0) {
             return ntsync_wait_single(event->ntsync_fd, dwMilliseconds) ? STATUS_WAIT_0 : STATUS_TIMEOUT;
         }
         pthread_mutex_lock(&event->mutex);
@@ -449,8 +479,19 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
             pthread_mutex_unlock(&event->mutex);
             return STATUS_TIMEOUT;
         }
-        while (!event->signaled) {
-            pthread_cond_wait(&event->condition, &event->mutex);
+        if (dwMilliseconds == 0xffffffffu) {
+            while (!event->signaled) {
+                pthread_cond_wait(&event->condition, &event->mutex);
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while (!event->signaled) {
+                if (pthread_cond_timedwait(&event->condition, &event->mutex, &deadline) == ETIMEDOUT
+                    && !event->signaled) {
+                    pthread_mutex_unlock(&event->mutex);
+                    return STATUS_TIMEOUT;
+                }
+            }
         }
         if (!event->manual_reset) {
             event->signaled = false;
@@ -466,8 +507,19 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
             pthread_mutex_unlock(&thread->mutex);
             return STATUS_TIMEOUT;
         }
-        while (!thread->finished) {
-            pthread_cond_wait(&thread->condition, &thread->mutex);
+        if (dwMilliseconds == 0xffffffffu) {
+            while (!thread->finished) {
+                pthread_cond_wait(&thread->condition, &thread->mutex);
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while (!thread->finished) {
+                if (pthread_cond_timedwait(&thread->condition, &thread->mutex, &deadline) == ETIMEDOUT
+                    && !thread->finished) {
+                    pthread_mutex_unlock(&thread->mutex);
+                    return STATUS_TIMEOUT;
+                }
+            }
         }
         pthread_mutex_unlock(&thread->mutex);
         return STATUS_WAIT_0;
@@ -475,14 +527,24 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
 
     if (handle->kind == handle_kind::semaphore_handle) {
         auto *semaphore = static_cast<semaphore_handle_data *>(handle->payload);
-        if (semaphore->ntsync_fd >= 0 && (dwMilliseconds == 0 || dwMilliseconds == 0xffffffffu)) {
+        // Exactly one backend per handle: ntsync when available, else the
+        // POSIX semaphore. ReleaseSemaphore posts the same single backend.
+        if (semaphore->ntsync_fd >= 0) {
             return ntsync_wait_single(semaphore->ntsync_fd, dwMilliseconds) ? STATUS_WAIT_0 : STATUS_TIMEOUT;
         }
+        int rc;
         if (dwMilliseconds == 0) {
-            return sem_trywait(&semaphore->semaphore) == 0 ? STATUS_WAIT_0 : STATUS_TIMEOUT;
+            while ((rc = sem_trywait(&semaphore->semaphore)) == -1 && errno == EINTR) {
+            }
+        } else if (dwMilliseconds == 0xffffffffu) {
+            while ((rc = sem_wait(&semaphore->semaphore)) == -1 && errno == EINTR) {
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while ((rc = sem_timedwait(&semaphore->semaphore, &deadline)) == -1 && errno == EINTR) {
+            }
         }
-        sem_wait(&semaphore->semaphore);
-        return STATUS_WAIT_0;
+        return rc == 0 ? STATUS_WAIT_0 : STATUS_TIMEOUT;
     }
 
     return 0;
@@ -995,15 +1057,26 @@ WINAPI BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPre
         return FALSE;
     }
     auto *semaphore = static_cast<semaphore_handle_data *>(handle->payload);
+    LONG previous = 0;
     if (semaphore->ntsync_fd >= 0) {
+        // Post only the ntsync backend; waits consume only it. Posting the
+        // POSIX semaphore too would let one release wake two waiters when
+        // the two counters are consumed through different paths.
         uint32_t count = static_cast<uint32_t>(lReleaseCount);
-        ioctl(semaphore->ntsync_fd, NTSYNC_IOC_SEM_RELEASE, &count);
-    }
-    for (LONG i = 0; i < lReleaseCount; ++i) {
-        sem_post(&semaphore->semaphore);
+        if (ioctl(semaphore->ntsync_fd, NTSYNC_IOC_SEM_RELEASE, &count) != 0) {
+            return FALSE; // e.g. EOVERFLOW past the maximum, as on Windows
+        }
+        previous = static_cast<LONG>(count); // the kernel writes back the previous count
+    } else {
+        int value = 0;
+        sem_getvalue(&semaphore->semaphore, &value);
+        previous = value;
+        for (LONG i = 0; i < lReleaseCount; ++i) {
+            sem_post(&semaphore->semaphore);
+        }
     }
     if (lpPreviousCount) {
-        *lpPreviousCount = 0;
+        *lpPreviousCount = previous;
     }
     return TRUE;
 }
