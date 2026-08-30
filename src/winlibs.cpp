@@ -1249,8 +1249,25 @@ static size_t padded_alloc_size(size_t size)
     return checked_add_size(size, ALLOC_PADDING, padded) ? padded : size;
 }
 
+// SE_ZERO_MALLOC=1: zero-fill CRT allocations, mimicking Windows where the NT
+// heap satisfies large requests straight from VirtualAlloc (always fresh zero
+// pages) while glibc reuses dirty arena memory. Diagnostic for read-of-
+// uninitialized-memory faults in the loaded PE (defect L3).
+static bool zero_malloc_enabled()
+{
+    static const bool enabled = [] {
+        const char *value = getenv("SE_ZERO_MALLOC");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
+
 WINAPI void *crt_malloc(size_t size) {
-    return malloc(padded_alloc_size(size));
+    size_t padded = padded_alloc_size(size);
+    void *ptr = malloc(padded);
+    if (ptr && zero_malloc_enabled())
+        memset(ptr, 0, padded);
+    return ptr;
 }
 
 WINAPI int crt__callnewh(size_t size) {
@@ -1999,9 +2016,12 @@ WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
     }
     alignment = std::max(alignment, size_t{16});
     void *ptr = nullptr;
-    int error = posix_memalign(&ptr, alignment, padded_alloc_size(size));
+    size_t padded = padded_alloc_size(size);
+    int error = posix_memalign(&ptr, alignment, padded);
     if (error)
         errno = error;
+    if (!error && ptr && zero_malloc_enabled())
+        memset(ptr, 0, padded);
     return error ? nullptr : ptr;
 }
 WINAPI void msvcr_operator_delete(void *ptr) { crt_free(ptr); }
