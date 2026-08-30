@@ -2097,7 +2097,48 @@ WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
     return error ? nullptr : ptr;
 }
 WINAPI void msvcr_operator_delete(void *ptr) { crt_free(ptr); }
-WINAPI clock_t msvcr_clock() { return clock(); }
+// MSVC clock() returns wall-clock milliseconds since process start
+// (CLOCKS_PER_SEC == 1000); glibc clock() returns process CPU time in
+// microseconds. PE code must get the Windows semantics.
+static int64_t process_start_boottime_ms()
+{
+    // /proc/self/stat field 22 (starttime) is in clock ticks since boot,
+    // on the same timebase as CLOCK_BOOTTIME. comm (field 2) may contain
+    // spaces and parentheses, so scan from the last ')'.
+    FILE *f = fopen("/proc/self/stat", "r");
+    if (!f)
+        return -1;
+    char buf[1024];
+    size_t len = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    buf[len] = '\0';
+    const char *p = strrchr(buf, ')');
+    if (!p)
+        return -1;
+    unsigned long long starttime_ticks = 0;
+    int field = 2; // ')' ends field 2 (comm)
+    for (p++; *p && field < 22; ++p) {
+        if (*p == ' ') {
+            if (++field == 22 &&
+                sscanf(p + 1, "%llu", &starttime_ticks) == 1)
+                return static_cast<int64_t>(
+                    starttime_ticks * 1000 / sysconf(_SC_CLK_TCK));
+        }
+    }
+    return -1;
+}
+WINAPI int32_t msvcr_clock()
+{
+    timespec ts;
+    clock_gettime(CLOCK_BOOTTIME, &ts);
+    int64_t now_ms = ts.tv_sec * 1000LL + ts.tv_nsec / 1000000;
+    static const int64_t start_ms = [now_ms]() {
+        int64_t s = process_start_boottime_ms();
+        // Fallback: anchor at first call.
+        return s >= 0 ? s : now_ms;
+    }();
+    return static_cast<int32_t>(now_ms - start_ms);
+}
 WINAPI unsigned int msvcr_current_scheduler_id() { return 0; }
 WINAPI double msvcr_sqrt(double x) { return std::sqrt(x); }
 WINAPI long long msvcp__Xtime_get_ticks() {
@@ -3155,6 +3196,7 @@ void register_windows_library_functions() {
     register_function("MSVCR120.dll", "_aligned_malloc", generic_func(&msvcr__aligned_malloc));
     register_function("MSVCR120.dll", "??3@YAXPEAX@Z", generic_func(&msvcr_operator_delete));
     register_function("MSVCR120.dll", "clock", generic_func(&msvcr_clock));
+    register_function("api-ms-win-crt-time-l1-1-0.dll", "clock", generic_func(&msvcr_clock));
     register_function("MSVCR120.dll", "?_Id@_CurrentScheduler@details@Concurrency@@SAIXZ", generic_func(&msvcr_current_scheduler_id));
     register_function("MSVCR120.dll", "sqrt", generic_func(&msvcr_sqrt));
 
