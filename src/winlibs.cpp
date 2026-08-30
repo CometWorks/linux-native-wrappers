@@ -2006,7 +2006,6 @@ WINAPI void msvcr___crtCapturePreviousContext(PCONTEXT contextRecord) {}
 WINAPI void msvcr_terminate() { std::terminate(); }
 WINAPI void msvcr_type_info_dtor_internal_method(void *self) {}
 WINAPI void msvcr___clean_type_info_names_internal(void **list) {}
-WINAPI float crt_sqrt(double x) { return std::sqrt(x); }
 WINAPI void *msvcr___RTDynamicCast(void *inptr, LONG vfdelta, void *src, void *target, BOOL isReference) {
     if (!inptr)
         return nullptr;
