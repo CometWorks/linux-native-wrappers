@@ -248,23 +248,53 @@ static int get_ntsync_fd()
     return g_ntsync_fd;
 }
 
+// Absolute deadline for a relative Windows timeout, on the given clock.
+static timespec abstime_after_ms(clockid_t clock, DWORD timeout_ms)
+{
+    timespec ts{};
+    clock_gettime(clock, &ts);
+    ts.tv_sec += timeout_ms / 1000;
+    ts.tv_nsec += static_cast<long>(timeout_ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= 1000000000L;
+    }
+    return ts;
+}
+
 static bool ntsync_wait_single(int obj_fd, DWORD timeout_ms)
 {
     uint32_t obj = static_cast<uint32_t>(obj_fd);
     ntsync_wait_args args{};
-    args.timeout = timeout_ms == 0 ? 0 : UINT64_MAX;
+    if (timeout_ms == 0) {
+        args.timeout = 0;
+    } else if (timeout_ms == 0xffffffffu) {
+        args.timeout = UINT64_MAX;
+    } else {
+        // ntsync timeouts are absolute against CLOCK_MONOTONIC.
+        timespec deadline = abstime_after_ms(CLOCK_MONOTONIC, timeout_ms);
+        args.timeout = static_cast<uint64_t>(deadline.tv_sec) * 1000000000ull +
+                       static_cast<uint64_t>(deadline.tv_nsec);
+    }
     args.objs = reinterpret_cast<uint64_t>(&obj);
     args.count = 1;
     args.owner = 0;
-    int ret = ioctl(get_ntsync_fd(), NTSYNC_IOC_WAIT_ANY, &args);
-    if (ret == 0) {
-        return true;
-    }
-    if (errno == ETIMEDOUT) {
+    for (;;) {
+        int ret = ioctl(get_ntsync_fd(), NTSYNC_IOC_WAIT_ANY, &args);
+        if (ret == 0) {
+            return true;
+        }
+        if (errno == EINTR) {
+            // Signals (e.g. the .NET GC suspending threads) interrupt the
+            // ioctl. Windows waits never return early for this; retry with
+            // the same absolute deadline.
+            continue;
+        }
+        if (errno != ETIMEDOUT) {
+            fprintf(stderr, "ntsync wait failed: %s\n", strerror(errno));
+        }
         return false;
     }
-    fprintf(stderr, "ntsync wait failed: %s\n", strerror(errno));
-    return false;
 }
 
 static win_handle *make_handle(handle_kind kind, void *payload) {
@@ -441,7 +471,7 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
     auto *handle = static_cast<win_handle *>(hHandle);
     if (handle->kind == handle_kind::event_handle) {
         auto *event = static_cast<event_handle_data *>(handle->payload);
-        if (event->ntsync_fd >= 0 && (dwMilliseconds == 0 || dwMilliseconds == 0xffffffffu)) {
+        if (event->ntsync_fd >= 0) {
             return ntsync_wait_single(event->ntsync_fd, dwMilliseconds) ? STATUS_WAIT_0 : STATUS_TIMEOUT;
         }
         pthread_mutex_lock(&event->mutex);
@@ -449,8 +479,19 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
             pthread_mutex_unlock(&event->mutex);
             return STATUS_TIMEOUT;
         }
-        while (!event->signaled) {
-            pthread_cond_wait(&event->condition, &event->mutex);
+        if (dwMilliseconds == 0xffffffffu) {
+            while (!event->signaled) {
+                pthread_cond_wait(&event->condition, &event->mutex);
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while (!event->signaled) {
+                if (pthread_cond_timedwait(&event->condition, &event->mutex, &deadline) == ETIMEDOUT
+                    && !event->signaled) {
+                    pthread_mutex_unlock(&event->mutex);
+                    return STATUS_TIMEOUT;
+                }
+            }
         }
         if (!event->manual_reset) {
             event->signaled = false;
@@ -466,8 +507,19 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
             pthread_mutex_unlock(&thread->mutex);
             return STATUS_TIMEOUT;
         }
-        while (!thread->finished) {
-            pthread_cond_wait(&thread->condition, &thread->mutex);
+        if (dwMilliseconds == 0xffffffffu) {
+            while (!thread->finished) {
+                pthread_cond_wait(&thread->condition, &thread->mutex);
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while (!thread->finished) {
+                if (pthread_cond_timedwait(&thread->condition, &thread->mutex, &deadline) == ETIMEDOUT
+                    && !thread->finished) {
+                    pthread_mutex_unlock(&thread->mutex);
+                    return STATUS_TIMEOUT;
+                }
+            }
         }
         pthread_mutex_unlock(&thread->mutex);
         return STATUS_WAIT_0;
@@ -475,14 +527,24 @@ WINAPI DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bA
 
     if (handle->kind == handle_kind::semaphore_handle) {
         auto *semaphore = static_cast<semaphore_handle_data *>(handle->payload);
-        if (semaphore->ntsync_fd >= 0 && (dwMilliseconds == 0 || dwMilliseconds == 0xffffffffu)) {
+        // Exactly one backend per handle: ntsync when available, else the
+        // POSIX semaphore. ReleaseSemaphore posts the same single backend.
+        if (semaphore->ntsync_fd >= 0) {
             return ntsync_wait_single(semaphore->ntsync_fd, dwMilliseconds) ? STATUS_WAIT_0 : STATUS_TIMEOUT;
         }
+        int rc;
         if (dwMilliseconds == 0) {
-            return sem_trywait(&semaphore->semaphore) == 0 ? STATUS_WAIT_0 : STATUS_TIMEOUT;
+            while ((rc = sem_trywait(&semaphore->semaphore)) == -1 && errno == EINTR) {
+            }
+        } else if (dwMilliseconds == 0xffffffffu) {
+            while ((rc = sem_wait(&semaphore->semaphore)) == -1 && errno == EINTR) {
+            }
+        } else {
+            timespec deadline = abstime_after_ms(CLOCK_REALTIME, dwMilliseconds);
+            while ((rc = sem_timedwait(&semaphore->semaphore, &deadline)) == -1 && errno == EINTR) {
+            }
         }
-        sem_wait(&semaphore->semaphore);
-        return STATUS_WAIT_0;
+        return rc == 0 ? STATUS_WAIT_0 : STATUS_TIMEOUT;
     }
 
     return 0;
@@ -995,15 +1057,26 @@ WINAPI BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPre
         return FALSE;
     }
     auto *semaphore = static_cast<semaphore_handle_data *>(handle->payload);
+    LONG previous = 0;
     if (semaphore->ntsync_fd >= 0) {
+        // Post only the ntsync backend; waits consume only it. Posting the
+        // POSIX semaphore too would let one release wake two waiters when
+        // the two counters are consumed through different paths.
         uint32_t count = static_cast<uint32_t>(lReleaseCount);
-        ioctl(semaphore->ntsync_fd, NTSYNC_IOC_SEM_RELEASE, &count);
-    }
-    for (LONG i = 0; i < lReleaseCount; ++i) {
-        sem_post(&semaphore->semaphore);
+        if (ioctl(semaphore->ntsync_fd, NTSYNC_IOC_SEM_RELEASE, &count) != 0) {
+            return FALSE; // e.g. EOVERFLOW past the maximum, as on Windows
+        }
+        previous = static_cast<LONG>(count); // the kernel writes back the previous count
+    } else {
+        int value = 0;
+        sem_getvalue(&semaphore->semaphore, &value);
+        previous = value;
+        for (LONG i = 0; i < lReleaseCount; ++i) {
+            sem_post(&semaphore->semaphore);
+        }
     }
     if (lpPreviousCount) {
-        *lpPreviousCount = 0;
+        *lpPreviousCount = previous;
     }
     return TRUE;
 }
@@ -1249,8 +1322,25 @@ static size_t padded_alloc_size(size_t size)
     return checked_add_size(size, ALLOC_PADDING, padded) ? padded : size;
 }
 
+// SE_ZERO_MALLOC=1: zero-fill CRT allocations, mimicking Windows where the NT
+// heap satisfies large requests straight from VirtualAlloc (always fresh zero
+// pages) while glibc reuses dirty arena memory. Diagnostic for read-of-
+// uninitialized-memory faults in the loaded PE (defect L3).
+static bool zero_malloc_enabled()
+{
+    static const bool enabled = [] {
+        const char *value = getenv("SE_ZERO_MALLOC");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
+
 WINAPI void *crt_malloc(size_t size) {
-    return malloc(padded_alloc_size(size));
+    size_t padded = padded_alloc_size(size);
+    void *ptr = malloc(padded);
+    if (ptr && zero_malloc_enabled())
+        memset(ptr, 0, padded);
+    return ptr;
 }
 
 WINAPI int crt__callnewh(size_t size) {
@@ -1916,7 +2006,6 @@ WINAPI void msvcr___crtCapturePreviousContext(PCONTEXT contextRecord) {}
 WINAPI void msvcr_terminate() { std::terminate(); }
 WINAPI void msvcr_type_info_dtor_internal_method(void *self) {}
 WINAPI void msvcr___clean_type_info_names_internal(void **list) {}
-WINAPI float crt_sqrt(double x) { return std::sqrt(x); }
 WINAPI void *msvcr___RTDynamicCast(void *inptr, LONG vfdelta, void *src, void *target, BOOL isReference) {
     if (!inptr)
         return nullptr;
@@ -1999,13 +2088,57 @@ WINAPI void *msvcr__aligned_malloc(size_t size, size_t alignment) {
     }
     alignment = std::max(alignment, size_t{16});
     void *ptr = nullptr;
-    int error = posix_memalign(&ptr, alignment, padded_alloc_size(size));
+    size_t padded = padded_alloc_size(size);
+    int error = posix_memalign(&ptr, alignment, padded);
     if (error)
         errno = error;
+    if (!error && ptr && zero_malloc_enabled())
+        memset(ptr, 0, padded);
     return error ? nullptr : ptr;
 }
 WINAPI void msvcr_operator_delete(void *ptr) { crt_free(ptr); }
-WINAPI clock_t msvcr_clock() { return clock(); }
+// MSVC clock() returns wall-clock milliseconds since process start
+// (CLOCKS_PER_SEC == 1000); glibc clock() returns process CPU time in
+// microseconds. PE code must get the Windows semantics.
+static int64_t process_start_boottime_ms()
+{
+    // /proc/self/stat field 22 (starttime) is in clock ticks since boot,
+    // on the same timebase as CLOCK_BOOTTIME. comm (field 2) may contain
+    // spaces and parentheses, so scan from the last ')'.
+    FILE *f = fopen("/proc/self/stat", "r");
+    if (!f)
+        return -1;
+    char buf[1024];
+    size_t len = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    buf[len] = '\0';
+    const char *p = strrchr(buf, ')');
+    if (!p)
+        return -1;
+    unsigned long long starttime_ticks = 0;
+    int field = 2; // ')' ends field 2 (comm)
+    for (p++; *p && field < 22; ++p) {
+        if (*p == ' ') {
+            if (++field == 22 &&
+                sscanf(p + 1, "%llu", &starttime_ticks) == 1)
+                return static_cast<int64_t>(
+                    starttime_ticks * 1000 / sysconf(_SC_CLK_TCK));
+        }
+    }
+    return -1;
+}
+WINAPI int32_t msvcr_clock()
+{
+    timespec ts;
+    clock_gettime(CLOCK_BOOTTIME, &ts);
+    int64_t now_ms = ts.tv_sec * 1000LL + ts.tv_nsec / 1000000;
+    static const int64_t start_ms = [now_ms]() {
+        int64_t s = process_start_boottime_ms();
+        // Fallback: anchor at first call.
+        return s >= 0 ? s : now_ms;
+    }();
+    return static_cast<int32_t>(now_ms - start_ms);
+}
 WINAPI unsigned int msvcr_current_scheduler_id() { return 0; }
 WINAPI double msvcr_sqrt(double x) { return std::sqrt(x); }
 WINAPI long long msvcp__Xtime_get_ticks() {
@@ -3063,6 +3196,7 @@ void register_windows_library_functions() {
     register_function("MSVCR120.dll", "_aligned_malloc", generic_func(&msvcr__aligned_malloc));
     register_function("MSVCR120.dll", "??3@YAXPEAX@Z", generic_func(&msvcr_operator_delete));
     register_function("MSVCR120.dll", "clock", generic_func(&msvcr_clock));
+    register_function("api-ms-win-crt-time-l1-1-0.dll", "clock", generic_func(&msvcr_clock));
     register_function("MSVCR120.dll", "?_Id@_CurrentScheduler@details@Concurrency@@SAIXZ", generic_func(&msvcr_current_scheduler_id));
     register_function("MSVCR120.dll", "sqrt", generic_func(&msvcr_sqrt));
 
