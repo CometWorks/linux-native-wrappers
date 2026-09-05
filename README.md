@@ -140,6 +140,7 @@ A normal build has these self-contained tests:
 | `se2_generators` | SE2 generators with synthetic C# declarations |
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
+| `crt_qsort` | Shared-library ABI bridge; repeated, nested, concurrent and empty/single-item sorts |
 | `tls_dialect` | No wrapper library imports `__tls_get_addr` (see below) |
 | `ntsync_init` | Event and semaphore shims through the shared library, ntsync gets opened when the device exists |
 | `ms_abi_tls` | An `ms_abi` function in a shared library keeps RDI and XMM6 to XMM15 across a thread-local access |

@@ -196,6 +196,12 @@ if(BUILD_TESTING)
     add_test(NAME se2_generators
             COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se2_generators.py)
 
+    find_package(Threads REQUIRED)
+    add_executable(crt_qsort_test tests/crt_qsort.cpp)
+    target_link_libraries(crt_qsort_test PRIVATE Havok Threads::Threads)
+    add_test(NAME crt_qsort COMMAND crt_qsort_test)
+    set_tests_properties(crt_qsort PROPERTIES TIMEOUT 10)
+
     add_executable(thread_id_dll_attach_test
             ${SOURCES}
             tests/thread_id_dll_attach.cpp
