@@ -1,7 +1,8 @@
 // Loads ms_abi_tls_probe at run time, like the game loads the wrappers, and
-// calls its probe from fresh threads so every call takes the dynamic TLS
-// resolver's slow path at least once. With the traditional TLS dialect the
-// probe crashes (GCC keeps the out pointer in RDI across __tls_get_addr);
+// calls its probe from fresh threads. CTest disables glibc's optional static
+// TLS allocation so these calls exercise the dynamic TLS resolver.
+// With the traditional TLS dialect the probe crashes (GCC keeps the out
+// pointer in RDI across __tls_get_addr);
 // with TLS descriptors it must keep both the pointer and XMM6 to XMM15.
 #include <cstdint>
 #include <cstdio>

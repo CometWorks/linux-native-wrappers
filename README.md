@@ -141,15 +141,21 @@ A normal build has these self-contained tests:
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
 | `crt_qsort` | Shared-library ABI bridge; repeated, nested, concurrent and empty/single-item sorts |
-| `tls_dialect` | No wrapper library imports `__tls_get_addr` (see below) |
-| `ntsync_init` | Event and semaphore shims through the shared library, ntsync gets opened when the device exists |
-| `ms_abi_tls` | An `ms_abi` function in a shared library keeps RDI and XMM6 to XMM15 across a thread-local access |
+| `tls_dialect` | No wrapper library imports `__tls_get_addr` (see above) |
+| `ntsync_init_event`, `ntsync_init_semaphore` | Each API initializes ntsync independently in a fresh process and completes a shared-library round trip when the device is accessible |
+| `ms_abi_tls` | An `ms_abi` function in a shared library keeps register values across a thread-local access, with dynamic TLS resolution forced |
 
 Run them with:
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+CTest runs `ms_abi_tls` with
+`GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0`. Without this setting, glibc
+can allocate the small probe in static TLS, so fresh threads alone do not
+exercise the dynamic resolver. Use the same environment setting when running
+`ms_abi_tls_test` directly.
 
 The generator tests are smoke tests. They do not compare a full regeneration
 from the game assemblies with every committed wrapper.

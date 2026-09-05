@@ -3,6 +3,7 @@
 // dialect change, the std::call_once inlined into CreateEventW handed
 // pthread_once a GOT slot instead of the once flag, so init_ntsync never ran
 // and every object silently used the pthread fallback.
+// Each API runs in a separate process so neither can initialize for the other.
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -40,18 +41,23 @@ static bool ntsync_device_open()
     return found;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-    HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    HANDLE semaphore = CreateSemaphoreW(nullptr, 0, 1, nullptr);
-    if (!event || !semaphore)
-        return 1;
-    if (!SetEvent(event) || WaitForSingleObject(event, 0) != WAIT_OBJECT_0)
+    if (argc != 2 || (std::strcmp(argv[1], "event") != 0 &&
+                      std::strcmp(argv[1], "semaphore") != 0)) {
+        std::fputs("usage: ntsync_init_test <event|semaphore>\n", stderr);
         return 2;
-    if (!ReleaseSemaphore(semaphore, 1, nullptr) ||
-        WaitForSingleObject(semaphore, 0) != WAIT_OBJECT_0)
+    }
+    bool semaphore = std::strcmp(argv[1], "semaphore") == 0;
+    HANDLE handle = semaphore ? CreateSemaphoreW(nullptr, 0, 1, nullptr)
+                              : CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!handle)
+        return 1;
+    if (semaphore ? !ReleaseSemaphore(handle, 1, nullptr) : !SetEvent(handle))
+        return 2;
+    if (WaitForSingleObject(handle, 0) != WAIT_OBJECT_0)
         return 3;
-    if (!CloseHandle(event) || !CloseHandle(semaphore))
+    if (!CloseHandle(handle))
         return 4;
     if (access("/dev/ntsync", R_OK) != 0) {
         std::puts("ntsync device not accessible, only the fallback path was exercised");
@@ -61,6 +67,6 @@ int main()
         std::fputs("/dev/ntsync exists but the wrapper never opened it\n", stderr);
         return 5;
     }
-    std::puts("ntsync initialized, event and semaphore round trips passed");
+    std::printf("ntsync initialized, %s round trip passed\n", argv[1]);
     return 0;
 }

@@ -235,16 +235,20 @@ if(BUILD_TESTING)
     add_executable(ntsync_init_test tests/ntsync_init.cpp)
     target_link_libraries(ntsync_init_test PRIVATE Havok)
     target_compile_options(ntsync_init_test PRIVATE -Wall)
-    add_test(NAME ntsync_init COMMAND ntsync_init_test)
-    set_tests_properties(ntsync_init PROPERTIES TIMEOUT 10)
+    add_test(NAME ntsync_init_event COMMAND ntsync_init_test event)
+    add_test(NAME ntsync_init_semaphore COMMAND ntsync_init_test semaphore)
+    set_tests_properties(ntsync_init_event ntsync_init_semaphore PROPERTIES TIMEOUT 10)
 
-    find_package(Threads REQUIRED)
     add_library(ms_abi_tls_probe SHARED tests/ms_abi_tls_probe.cpp)
     target_compile_options(ms_abi_tls_probe PRIVATE -Wall -fPIC)
     add_executable(ms_abi_tls_test tests/ms_abi_tls.cpp)
     target_link_libraries(ms_abi_tls_test PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
     add_test(NAME ms_abi_tls COMMAND ms_abi_tls_test $<TARGET_FILE:ms_abi_tls_probe>)
-    set_tests_properties(ms_abi_tls PROPERTIES TIMEOUT 30)
+    # The tiny probe otherwise fits glibc's optional static TLS allocation,
+    # bypassing the dynamic resolver even when called from fresh threads.
+    set_tests_properties(ms_abi_tls PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0")
 
     if(BIN64 AND EXISTS "${BIN64}/d3dcompiler_47.dll")
         add_test(NAME d3dcompiler_preprocess
