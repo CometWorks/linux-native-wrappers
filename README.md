@@ -119,7 +119,7 @@ and command-line tools are needed.
 
 ## Tests
 
-A normal build has four self-contained tests:
+A normal build has five self-contained tests:
 
 | Test | Coverage |
 | --- | --- |
@@ -127,6 +127,7 @@ A normal build has four self-contained tests:
 | `se2_generators` | SE2 generators with synthetic C# declarations |
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
+| `crt_qsort` | Shared-library ABI bridge; repeated, nested, concurrent and empty/single-item sorts |
 
 Run them with:
 

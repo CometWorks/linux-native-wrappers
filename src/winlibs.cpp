@@ -1353,8 +1353,6 @@ WINAPI void crt_free(void *ptr) {
 
 using pe_qsort_compare_t = int (WINAPI *)(const void*, const void*);
 
-static thread_local pe_qsort_compare_t current_qsort_compare = nullptr;
-
 using ms_va_list = const unsigned char *;
 
 template <typename T>
@@ -1693,14 +1691,14 @@ static int format_from_ms_va_list(char *buffer, size_t buffer_count, const char 
     return static_cast<int>(written);
 }
 
-static int crt_qsort_adapter(const void* lhs, const void* rhs) {
-    return current_qsort_compare(lhs, rhs);
+static int crt_qsort_adapter(const void* lhs, const void* rhs, void* context) {
+    return (*static_cast<pe_qsort_compare_t*>(context))(lhs, rhs);
 }
 
 WINAPI void crt_qsort(void* base, size_t num, size_t size, pe_qsort_compare_t compar) {
-    current_qsort_compare = compar;
-    std::qsort(base, num, size, crt_qsort_adapter);
-    current_qsort_compare = nullptr;
+    // Keep comparator state per call: TLS access inside this ms_abi bridge
+    // can clobber libc arguments in GCC 13 builds, and breaks nested sorts.
+    qsort_r(base, num, size, crt_qsort_adapter, &compar);
 }
 
 WINAPI int crt___stdio_common_vsprintf(uint64_t _Options, char* _Buffer, size_t _BufferCount,
