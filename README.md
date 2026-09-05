@@ -117,9 +117,22 @@ ctest --test-dir build --output-on-failure
 CTest is enabled by default. Pass `-DBUILD_TESTING=OFF` when only the libraries
 and command-line tools are needed.
 
+### TLS dialect
+
+Every target is compiled with `-mtls-dialect=gnu2`. The Win32 and CRT shims are
+`ms_abi` functions, and GCC 12 and 13 assume the traditional
+`call __tls_get_addr` sequence preserves RDI and RSI inside them, which it does
+not. In an optimized shared library that turned a `thread_local` access in a
+shim into a call with a corrupted argument; the CRT `qsort` bridge sorted the
+GOT instead of the caller's array, and `CreateEventW` never ran the ntsync
+initializer. TLS descriptors resolve thread-local addresses with a call that
+preserves every register except RAX, so the shims are safe regardless of what
+the compiler keeps in RDI or RSI. Debug builds at `-O0` were never affected.
+The `tls_dialect` test fails if a library imports `__tls_get_addr` again.
+
 ## Tests
 
-A normal build has five self-contained tests:
+A normal build has these self-contained tests:
 
 | Test | Coverage |
 | --- | --- |
@@ -128,12 +141,21 @@ A normal build has five self-contained tests:
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
 | `crt_qsort` | Shared-library ABI bridge; repeated, nested, concurrent and empty/single-item sorts |
+| `tls_dialect` | No wrapper library imports `__tls_get_addr` (see above) |
+| `ntsync_init_event`, `ntsync_init_semaphore` | Each API initializes ntsync independently in a fresh process and completes a shared-library round trip when the device is accessible |
+| `ms_abi_tls` | An `ms_abi` function in a shared library keeps register values across a thread-local access, with dynamic TLS resolution forced |
 
 Run them with:
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+CTest runs `ms_abi_tls` with
+`GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0`. Without this setting, glibc
+can allocate the small probe in static TLS, so fresh threads alone do not
+exercise the dynamic resolver. Use the same environment setting when running
+`ms_abi_tls_test` directly.
 
 The generator tests are smoke tests. They do not compare a full regeneration
 from the game assemblies with every committed wrapper.
