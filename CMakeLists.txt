@@ -5,6 +5,18 @@ project(NativeWrappers VERSION 1.0.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The Win32 and CRT shims are ms_abi functions, where RDI and RSI are
+# callee-saved. GCC 12 and 13 assume that the traditional TLS access sequence
+# (`lea sym@tlsld(%rip), %rdi; call __tls_get_addr`) preserves both registers,
+# although the lea itself overwrites RDI. Any thread_local access in a shim
+# while RDI or RSI holds a live value is therefore miscompiled at -O1 and
+# above; the CRT qsort bridge and the inlined std::call_once in CreateEventW
+# were two such cases. TLS descriptors resolve thread-local addresses through
+# a call that preserves every register except RAX and never use
+# __tls_get_addr, which avoids the problem for every present and future shim.
+# The tls_dialect and ms_abi_tls tests fail if this flag is dropped.
+add_compile_options(-mtls-dialect=gnu2)
+
 # Define source files
 set(SOURCES
         src/support.cpp
@@ -194,16 +206,39 @@ if(BUILD_TESTING)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
 
-    add_executable(windows_memory_test
-            ${SOURCES}
-            tests/windows_memory.cpp
-    )
-    target_link_libraries(windows_memory_test PRIVATE c ${CMAKE_DL_LIBS})
+    # Links the shared library instead of recompiling the sources. Only the
+    # shared-library build uses dynamic TLS, so only it can show TLS related
+    # miscompilation.
+    add_executable(windows_memory_test tests/windows_memory.cpp)
+    target_link_libraries(windows_memory_test PRIVATE Havok)
     target_compile_options(windows_memory_test PRIVATE -Wall -fpermissive)
     add_test(NAME windows_memory COMMAND windows_memory_test)
     set_tests_properties(windows_memory PROPERTIES
             TIMEOUT 60
             ENVIRONMENT "ASAN_OPTIONS=allocator_may_return_null=1:handle_segv=0")
+
+    set(WRAPPER_LIBRARY_FILES "")
+    foreach(wrapper IN ITEMS RecastDetour Havok VRageNative D3DCompiler KytheraV2
+            PlatformWindows Slug Physics Voxels)
+        list(APPEND WRAPPER_LIBRARY_FILES "$<TARGET_FILE:${wrapper}>")
+    endforeach()
+    add_test(NAME tls_dialect
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/tls_dialect.py
+                    ${WRAPPER_LIBRARY_FILES})
+
+    add_executable(ntsync_init_test tests/ntsync_init.cpp)
+    target_link_libraries(ntsync_init_test PRIVATE Havok)
+    target_compile_options(ntsync_init_test PRIVATE -Wall)
+    add_test(NAME ntsync_init COMMAND ntsync_init_test)
+    set_tests_properties(ntsync_init PROPERTIES TIMEOUT 10)
+
+    find_package(Threads REQUIRED)
+    add_library(ms_abi_tls_probe SHARED tests/ms_abi_tls_probe.cpp)
+    target_compile_options(ms_abi_tls_probe PRIVATE -Wall -fPIC)
+    add_executable(ms_abi_tls_test tests/ms_abi_tls.cpp)
+    target_link_libraries(ms_abi_tls_test PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+    add_test(NAME ms_abi_tls COMMAND ms_abi_tls_test $<TARGET_FILE:ms_abi_tls_probe>)
+    set_tests_properties(ms_abi_tls PROPERTIES TIMEOUT 30)
 
     if(BIN64 AND EXISTS "${BIN64}/d3dcompiler_47.dll")
         add_test(NAME d3dcompiler_preprocess

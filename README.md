@@ -117,9 +117,22 @@ ctest --test-dir build --output-on-failure
 CTest is enabled by default. Pass `-DBUILD_TESTING=OFF` when only the libraries
 and command-line tools are needed.
 
+### TLS dialect
+
+Every target is compiled with `-mtls-dialect=gnu2`. The Win32 and CRT shims are
+`ms_abi` functions, and GCC 12 and 13 assume the traditional
+`call __tls_get_addr` sequence preserves RDI and RSI inside them, which it does
+not. In an optimized shared library that turned a `thread_local` access in a
+shim into a call with a corrupted argument; the CRT `qsort` bridge sorted the
+GOT instead of the caller's array, and `CreateEventW` never ran the ntsync
+initializer. TLS descriptors resolve thread-local addresses with a call that
+preserves every register except RAX, so the shims are safe regardless of what
+the compiler keeps in RDI or RSI. Debug builds at `-O0` were never affected.
+The `tls_dialect` test fails if a library imports `__tls_get_addr` again.
+
 ## Tests
 
-A normal build has four self-contained tests:
+A normal build has these self-contained tests:
 
 | Test | Coverage |
 | --- | --- |
@@ -127,6 +140,9 @@ A normal build has four self-contained tests:
 | `se2_generators` | SE2 generators with synthetic C# declarations |
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
+| `tls_dialect` | No wrapper library imports `__tls_get_addr` (see below) |
+| `ntsync_init` | Event and semaphore shims through the shared library, ntsync gets opened when the device exists |
+| `ms_abi_tls` | An `ms_abi` function in a shared library keeps RDI and XMM6 to XMM15 across a thread-local access |
 
 Run them with:
 
