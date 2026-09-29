@@ -278,7 +278,8 @@ static bool ntsync_wait_single(int obj_fd, DWORD timeout_ms)
     }
     args.objs = reinterpret_cast<uint64_t>(&obj);
     args.count = 1;
-    args.owner = 0;
+    // The kernel requires a nonzero owner even when waiting only on a semaphore or event.
+    args.owner = static_cast<uint32_t>(syscall(SYS_gettid));
     for (;;) {
         int ret = ioctl(get_ntsync_fd(), NTSYNC_IOC_WAIT_ANY, &args);
         if (ret == 0) {
