@@ -74,6 +74,7 @@ add_library(
 add_library(
         KytheraV2
         SHARED
+        ${SOURCES}
         src/KytheraV2.cpp
 )
 
@@ -138,7 +139,7 @@ target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
-target_link_libraries(KytheraV2 PRIVATE c)
+target_link_libraries(KytheraV2 PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(PlatformWindows PRIVATE c)
 target_link_libraries(Slug PRIVATE c ${CMAKE_DL_LIBS})
 target_link_options(Slug PRIVATE -Wl,--hash-style=sysv)
@@ -342,5 +343,17 @@ if(BUILD_TESTING)
                         "${GAME2}/VRage.Slug.Native.dll"
                         "${CMAKE_BINARY_DIR}/voxels-teb-sidecars")
         set_tests_properties(voxels_teb PROPERTIES TIMEOUT 120)
+    endif()
+
+    if(GAME2 AND EXISTS "${GAME2}/VRage.KytheraV2.Native.dll")
+        add_executable(kythera_lifecycle_test tests/kythera_lifecycle.cpp)
+        target_link_libraries(kythera_lifecycle_test PRIVATE KytheraV2 Threads::Threads)
+        add_test(NAME kythera_lifecycle
+                COMMAND kythera_lifecycle_test
+                        "${GAME2}/VRage.KytheraV2.Native.dll"
+                        "${CMAKE_BINARY_DIR}/kythera-sidecars/VRage.KytheraV2.Native.dll")
+        set_tests_properties(kythera_lifecycle PROPERTIES
+                TIMEOUT 120
+                FAIL_REGULAR_EXPRESSION "Unknown symbol|Ordinal import not supported")
     endif()
 endif()

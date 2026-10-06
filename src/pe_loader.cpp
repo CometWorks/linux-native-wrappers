@@ -32,6 +32,7 @@
 #include <vector>
 #include <xmmintrin.h>
 
+#include "dll_loader.h"
 #include "pe_loader.h"
 #include "pe_sidecar.h"
 #include "support.h"
@@ -123,7 +124,8 @@ static RTL_BITMAP TlsBitmap = {
     .Buffer = (LPBYTE)&TlsBitmapData[0],
 };
 
-static constexpr size_t MAX_LOADED_IMAGES = 16;
+// KytheraV2 alone loads 17 images: the bridge and its 16 Kythera imports.
+static constexpr size_t MAX_LOADED_IMAGES = 32;
 static pe_image *g_loaded_images[MAX_LOADED_IMAGES] = {};
 static size_t g_loaded_image_count = 0;
 static size_t g_pending_image_count = 0;
@@ -617,6 +619,12 @@ static int process_import_descriptor(void *image, IMAGE_IMPORT_DESCRIPTOR *diren
 // Export reading
 // ---------------------------------------------------------------------------
 
+static const char *module_basename(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
 static int read_exports(struct pe_image *pe)
 {
     auto *opt_hdr = &pe->nt_hdr->OptionalHeader;
@@ -640,8 +648,9 @@ static int read_exports(struct pe_image *pe)
             break;
         }
 
+        // Registered under the basename, the module name other images import it by.
         register_function(
-            pe->name,
+            module_basename(pe->name),
             (char *)pe->image + name_table[i],
             (generic_func)((char *)pe->image + address), pe);
     }
@@ -652,15 +661,77 @@ static int read_exports(struct pe_image *pe)
 // Import fixup
 // ---------------------------------------------------------------------------
 
-static int fixup_imports(void *image, IMAGE_NT_HEADERS *nt_hdr)
+// Runtime DLLs are served by the shims in winlibs.cpp, even when a game folder
+// ships a copy of them.
+static bool is_runtime_module(const char *dll)
 {
-    auto *opt_hdr = &nt_hdr->OptionalHeader;
-    auto *import_data_dir = &opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    static const char *const prefixes[] = {
+        "api-ms-win-", "vcruntime", "msvcp", "msvcr", "ucrtbase", "concrt",
+    };
+    for (const char *prefix : prefixes)
+        if (strncasecmp(dll, prefix, strlen(prefix)) == 0)
+            return true;
+    return false;
+}
+
+static bool module_registered(const char *dll)
+{
+    for (int i = 0; i < num_pe_exports; ++i)
+        if (pe_export_list[i].dll && strcasecmp(pe_export_list[i].dll, dll) == 0)
+            return true;
+    return false;
+}
+
+static std::string sibling_path(const char *path, const char *name)
+{
+    const char *slash = strrchr(path, '/');
+    return std::string(path, slash ? slash + 1 - path : 0) + name;
+}
+
+// Loads a PE import that sits next to the importing DLL, the way Windows finds
+// it in the application directory. It is linked and attached before its
+// importer, so the importer's DllMain sees an initialized dependency. Its
+// sidecar goes next to the importer's one. Returns false only when the file
+// exists but cannot be loaded; a missing file leaves the imports to the
+// "Unknown symbol" stubs as before.
+static bool load_sibling_import(pe_image *importer, const char *dll)
+{
+    static std::vector<std::string> attempted;
+    std::lock_guard<std::recursive_mutex> lock(g_loader_mutex);
+    if (is_runtime_module(dll) || module_registered(dll))
+        return true;
+    for (const auto &name : attempted)
+        if (strcasecmp(name.c_str(), dll) == 0)
+            return true;
+    attempted.emplace_back(dll);
+
+    std::string path = sibling_path(importer->name, dll);
+    if (access(path.c_str(), R_OK) != 0)
+        return true;
+    std::string sidecar;
+    if (importer->sidecar_path && *importer->sidecar_path)
+        sidecar = sibling_path(importer->sidecar_path, dll);
+
+    // Never freed: loaded images cannot be unloaded.
+    auto *child = new pe_image{};
+    if (load_dll(child, path.c_str(), sidecar.empty() ? nullptr : sidecar.c_str()))
+        return true;
+    LogMessageA("Failed to load PE import %s", path.c_str());
+    delete child;
+    return false;
+}
+
+static int fixup_imports(pe_image *pe)
+{
+    auto *image = pe->image;
+    auto *import_data_dir = &pe->opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
     auto *dirent = RVA2VA(image, import_data_dir->VirtualAddress, IMAGE_IMPORT_DESCRIPTOR *);
 
     int ret = 0;
     for (int i = 0; dirent[i].Name; i++) {
         char *name = RVA2VA(image, dirent[i].Name, char *);
+        if (!load_sibling_import(pe, name))
+            return -ENOENT;
         ret += process_import_descriptor(image, &dirent[i], name);
     }
     return ret;
@@ -820,7 +891,7 @@ int link_pe_images(pe_image *pe_image, unsigned short n)
             return -EINVAL;
         }
 
-        if (fixup_imports(pe->image, pe->nt_hdr)) {
+        if (fixup_imports(pe)) {
             LogMessage("Failed to resolve imports");
             return -EINVAL;
         }
@@ -1007,6 +1078,7 @@ bool pe_load_library(const char *filename, const char *sidecar_path, pe_image *p
     pe->size = 0;
     pe->registered = false;
     pe->thread_notifications_disabled = false;
+    pe->sidecar_path = sidecar_path && *sidecar_path ? strdup(sidecar_path) : nullptr;
 
     // The caller provides the complete path in a dedicated cache directory.
     // A DLL basename keeps stack traces readable without exposing this ELF to

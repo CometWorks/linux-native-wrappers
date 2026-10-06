@@ -2,6 +2,7 @@
 // PE loading/linking, TEB setup, TLS initialization, and DllMain invocation.
 
 #include <cstdlib>
+#include <cstring>
 
 #include "dll_loader.h"
 #include "support.h"
@@ -34,7 +35,8 @@ bool load_dll(pe_image *image, const char *name, const char *sidecar_path)
 
     register_windows_library_functions();
 
-    image->name = name;
+    // Kept: callers may free the path after Init, and imports load from its directory.
+    image->name = strdup(name);
     if (!pe_load_library(image->name, sidecar_path, image)) {
         LogMessageA("Missing DLL: %s", image->name);
         return false;
