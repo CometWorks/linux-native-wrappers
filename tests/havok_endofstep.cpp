@@ -20,6 +20,8 @@
 //   --threads N        Havok worker threads (default 1)
 //   --report N         print a status line every N steps (default 5000)
 //   --keep-going       count violations instead of exiting on the first one
+//   --fix              apply the Bugfixes plugin's workaround (HavokEndOfStepCallbackPatch) on every
+//                      listener detach
 // exit code: 0 clean, 1 violation found, 2 usage, 3 setup failure
 
 #include <algorithm>
@@ -259,6 +261,8 @@ static int g_type_offset;
 static int g_respawn;
 static bool g_probe;
 static std::mt19937 g_rng;
+static bool g_fix, g_in_step;
+static long g_fix_dropped;
 static void remove_game_order(Body &b);
 static void remove_dispose_first(Body &b);
 static void detach_and_delete_listener(Body &b);
@@ -403,6 +407,63 @@ static bool check_world(const char *when)
     return !bad;
 }
 
+// ---- the Bugfixes plugin's workaround, ported from HavokEndOfStepCallbackPatch.cs ----
+// On detach, drop the listener's live registrations from m_collisions and m_newCollisions in
+// place. Detaches during a step are queued and applied once FinishMtStep returns. Keep this in
+// sync with the plugin: it is what the havok_endofstep test proves.
+
+struct Registration { void *mgr; int source; };
+struct PendingPurge { void *listener; std::vector<Registration> records; };
+static std::vector<PendingPurge> g_pending_purges;
+
+// Removes every {mgr, listener, source} match from an hkArray, keeping the order.
+static long remove_entries(char *array, size_t entry_size, const Registration &r, void *listener)
+{
+    char *data = *reinterpret_cast<char **>(array);
+    int count = *reinterpret_cast<int *>(array + 8);
+    if (!data || count <= 0)
+        return 0;
+    int kept = 0;
+    for (int i = 0; i < count; ++i) {
+        char *entry = data + i * entry_size;
+        if (*reinterpret_cast<void **>(entry) == r.mgr && *reinterpret_cast<void **>(entry + 8) == listener &&
+            *reinterpret_cast<int *>(entry + 16) == r.source)
+            continue;
+        if (kept != i)
+            std::memmove(data + kept * entry_size, entry, entry_size);
+        ++kept;
+    }
+    *reinterpret_cast<int *>(array + 8) = kept;
+    return count - kept;
+}
+
+static void purge(const PendingPurge &p)
+{
+    char *util = endofstep_util(g_world);
+    for (const auto &r : p.records) {
+        g_fix_dropped += remove_entries(util + 0x20, 24, r, p.listener);
+        g_fix_dropped += remove_entries(util + 0x30, 32, r, p.listener);
+    }
+}
+
+static void set_contact_listener(void *body, void *listener, bool value)
+{
+    if (g_fix && !value && *reinterpret_cast<void **>(static_cast<char *>(body) + 0x10)) { // in a world
+        // Keen's listener: hkArray of 32-byte hkpCollisionEvent copies at +0x20, source at +0, mgr at +0x18.
+        const char *data = *reinterpret_cast<char **>(static_cast<char *>(listener) + 0x20);
+        int count = *reinterpret_cast<int *>(static_cast<char *>(listener) + 0x28);
+        PendingPurge p{listener, {}};
+        for (int i = 0; i < count; ++i)
+            p.records.push_back({*reinterpret_cast<void *const *>(data + i * 32 + 0x18),
+                                 *reinterpret_cast<const int *>(data + i * 32)});
+        if (g_in_step)
+            g_pending_purges.push_back(std::move(p));
+        else
+            purge(p);
+    }
+    HkEntity_SetContactListener(body, listener, value);
+}
+
 static void *g_box_shape;
 static int g_next_id;
 
@@ -424,7 +485,7 @@ static Body spawn_body(Vector3 pos)
                                               reinterpret_cast<void *>(&on_collision_added),
                                               reinterpret_cast<void *>(&on_collision_removed), 0);
     g_live_listeners.insert(listener);
-    HkEntity_SetContactListener(body, listener, true);
+    set_contact_listener(body, listener, true);
     HkWorld_AddEntity(g_world, body);
     return {body, listener, true, false, g_next_id++};
 }
@@ -432,7 +493,7 @@ static Body spawn_body(Vector3 pos)
 static void detach_and_delete_listener(Body &b)
 {
     if (b.attached)
-        HkEntity_SetContactListener(b.body, b.listener, false);
+        set_contact_listener(b.body, b.listener, false);
     b.attached = false;
     g_live_listeners.erase(b.listener);
     HkGlobal_ReleasePtr(b.listener);
@@ -490,7 +551,7 @@ static void remove_deferred(Body &b)
 
 static void toggle_listener(Body &b)
 {
-    HkEntity_SetContactListener(b.body, b.listener, !b.attached);
+    set_contact_listener(b.body, b.listener, !b.attached);
     b.attached = !b.attached;
     ++g_toggles;
 }
@@ -499,7 +560,7 @@ int main(int argc, char **argv)
 {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s Havok.dll sidecar SCENARIO [--steps N] [--seed N] [--bodies N] "
-                             "[--churn P] [--threads N] [--report N] [--keep-going]\n", argv[0]);
+                             "[--churn P] [--threads N] [--report N] [--keep-going] [--fix]\n", argv[0]);
         return 2;
     }
     g_scenario = argv[3];
@@ -516,6 +577,7 @@ int main(int argc, char **argv)
         else if (a == "--threads") threads = static_cast<int>(next());
         else if (a == "--report") report_every = next();
         else if (a == "--keep-going") keep_going = true;
+        else if (a == "--fix") g_fix = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     std::string scenario = g_scenario;
@@ -598,7 +660,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < body_count; ++i)
         g_bodies.push_back(spawn_body(spawn_position()));
 
-    std::printf("scenario=%s seed=%d bodies=%d churn=%d%% threads=%d\n", g_scenario, seed, body_count, churn, threads);
+    std::printf("scenario=%s seed=%d bodies=%d churn=%d%% threads=%d fix=%s\n", g_scenario, seed, body_count, churn,
+                threads, g_fix ? "on" : "off");
     std::fflush(stdout);
 
     const float dt = 1.f / 60.f;
@@ -667,7 +730,12 @@ int main(int argc, char **argv)
         HkJobThreadPool_WaitForCompletion(pool);
         if (!check_world("before FinishMtStep") && !keep_going)
             return 1;
+        g_in_step = true;
         HkWorld_FinishMtStep(g_world, queue, pool);
+        g_in_step = false;
+        for (const auto &p : g_pending_purges)
+            purge(p);
+        g_pending_purges.clear();
         HkWorld_MarkForWrite(g_world);
         while (g_respawn > 0) {
             g_bodies.push_back(spawn_body(spawn_position()));
@@ -675,7 +743,7 @@ int main(int argc, char **argv)
         }
         for (auto &z : g_zombies)
             if (*reinterpret_cast<void **>(static_cast<char *>(z.body) + 0x10) == nullptr && z.listener) {
-                HkEntity_SetContactListener(z.body, z.listener, false);
+                set_contact_listener(z.body, z.listener, false);
                 g_live_listeners.erase(z.listener);
                 HkGlobal_ReleasePtr(z.listener);
                 z.listener = nullptr;
@@ -687,12 +755,12 @@ int main(int argc, char **argv)
 
         if (report_every > 0 && g_step % report_every == 0) {
             std::printf("step %ld: collisions +%ld -%ld contacts=%ld removed=%ld toggles=%ld "
-                        "dead-listener-entries=%ld violations=%ld\n",
+                        "dead-listener-entries=%ld fix-dropped=%ld violations=%ld\n",
                         g_step, g_collisions_added.load(), g_collisions_removed.load(), g_contacts.load(), g_removed_bodies,
-                        g_toggles, g_dead_listener_entries, g_violations);
+                        g_toggles, g_dead_listener_entries, g_fix_dropped, g_violations);
             std::fflush(stdout);
         }
     }
-    std::printf("done: %ld steps, violations=%ld\n", g_step, g_violations);
+    std::printf("done: %ld steps, fix-dropped=%ld, violations=%ld\n", g_step, g_fix_dropped, g_violations);
     return g_violations ? 1 : 0;
 }

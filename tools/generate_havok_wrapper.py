@@ -197,11 +197,6 @@ STATIC_CALLBACKS = {
     },
 }
 
-# Hand-written code that runs inside a generated wrapper before the DLL call.
-PRE_CALL_HOOKS = {
-    'HkEntity_SetContactListener': 'havok_endofstep_before_set_contact_listener(instance, listener, value);',
-}
-
 # These callbacks are invoked synchronously. A fixed bridge plus a mutex serializes
 # each short native call without executable thunks.
 TRANSIENT_CALLBACKS = {
@@ -225,7 +220,6 @@ PREAMBLE = '''#include <cstdint>
 #include <unordered_map>
 
 #include "dll_loader.h"
-#include "havok_endofstep.h"
 
 #define DECLARE_FUNCTION_POINTER(func) static WINAPI func##_t p##func = nullptr;
 
@@ -547,8 +541,6 @@ def emit_wrapper(sig):
         map_call_arg(name, t, n) for t, n in sig['args'])
     lines = [f'{ret} {name}({params}) {{ EnsureThreadInfo();']
     lines.append(f'    REQUIRE_FUNCTION_POINTER({name})')
-    if name in PRE_CALL_HOOKS:
-        lines.append(f'    {PRE_CALL_HOOKS[name]}')
     if name == PHANTOM_CALLBACK_CREATE:
         enter, leave, delete = (arg_name for _, arg_name in sig['args'])
         lines.append(
@@ -594,7 +586,6 @@ def main(declarations):
         lines.append(f'    SET_FUNCTION_POINTER({sig["name"]})')
     for alias, target in EXPORT_ALIASES.items():
         lines.append(f'    register_function("Havok.dll", "{alias}", get_export("{target}"));')
-    lines.append('    havok_endofstep_init(g_havok_image.image, g_havok_image.size);')
     lines.append(FOOTER)
     for sig in signatures:
         lines.extend(emit_wrapper(sig))

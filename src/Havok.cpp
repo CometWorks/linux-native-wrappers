@@ -8,7 +8,6 @@
 #include <unordered_map>
 
 #include "dll_loader.h"
-#include "havok_endofstep.h"
 
 #define DECLARE_FUNCTION_POINTER(func) static WINAPI func##_t p##func = nullptr;
 
@@ -3186,7 +3185,6 @@ static void InitImpl(const char* dllPath, const char* sidecarPath)
     SET_FUNCTION_POINTER(HkSimpleShapePhantom_SetTransform)
     SET_FUNCTION_POINTER(HkIntermediateBuffer_ReleaseUnmanaged)
     register_function("Havok.dll", "HkJobThreadPool_RemoveReference", get_export("?HkJobThreadPool_RemoveReference@Havok@@YAXPEAVhkThreadPool@@@Z"));
-    havok_endofstep_init(g_havok_image.image, g_havok_image.size);
 }
 
 extern "C" {
@@ -4818,7 +4816,6 @@ void HKEntity_RemoveEntityListener(void* instance, void* listener) { EnsureThrea
 
 void HkEntity_SetContactListener(void* instance, void* listener, bool value) { EnsureThreadInfo();
     REQUIRE_FUNCTION_POINTER(HkEntity_SetContactListener)
-    havok_endofstep_before_set_contact_listener(instance, listener, value);
     pHkEntity_SetContactListener(instance, listener, value);
 }
 
