@@ -43,6 +43,7 @@ add_library(
         SHARED
         ${SOURCES}
         src/Havok.cpp
+        src/havok_endofstep.cpp
 )
 
 set_target_properties(RecastDetour PROPERTIES
@@ -295,6 +296,27 @@ if(BUILD_TESTING)
         set_tests_properties(havok_memory PROPERTIES
                 TIMEOUT 120
                 FAIL_REGULAR_EXPRESSION "duplicate free suppressed")
+
+        add_executable(havok_endofstep_test tests/havok_endofstep.cpp)
+        target_link_libraries(havok_endofstep_test PRIVATE Havok ${CMAKE_DL_LIBS})
+        # Without the hook the oracle must catch the dangling contact manager; the
+        # harness exits with 1 then, so the pass condition is its VIOLATION report.
+        add_test(NAME havok_endofstep_detects
+                COMMAND havok_endofstep_test
+                        "${BIN64}/Havok.dll"
+                        "${CMAKE_BINARY_DIR}/havok-endofstep-Havok.dll"
+                        dispose-first --steps 2000 --report 0)
+        set_tests_properties(havok_endofstep_detects PROPERTIES
+                TIMEOUT 120
+                PASS_REGULAR_EXPRESSION "VIOLATION")
+        add_test(NAME havok_endofstep
+                COMMAND havok_endofstep_test
+                        "${BIN64}/Havok.dll"
+                        "${CMAKE_BINARY_DIR}/havok-endofstep-Havok.dll"
+                        mixed --steps 3000 --report 0)
+        set_tests_properties(havok_endofstep PROPERTIES
+                TIMEOUT 300
+                ENVIRONMENT "LNW_HAVOK_ENDOFSTEP_FIX=1")
     endif()
 
     if(GAME2 AND EXISTS "${GAME2}/VRage.Physics.Native.dll")

@@ -145,6 +145,23 @@ A normal build has these self-contained tests:
 | `ntsync_init_event`, `ntsync_init_semaphore` | Each API initializes ntsync independently in a fresh process and completes a shared-library round trip when the device is accessible |
 | `ms_abi_tls` | An `ms_abi` function in a shared library keeps register values across a thread-local access, with dynamic TLS resolution forced |
 
+With `BIN64` pointing at the game's `Bin64`, the Havok tests also run against the real
+`Havok.dll`:
+
+| Test | Coverage |
+| --- | --- |
+| `havok_unwind` | Crash backtraces name PE frames and the wrapper export |
+| `havok_memory` | Repeated shape creation does not leak Havok memory |
+| `havok_endofstep_detects` | The `havok_endofstep_test` oracle finds the dangling contact manager that crashes SE1 inside `FinishMtStep` (SE1-0015); expected to report a violation |
+| `havok_endofstep` | The same stress run stays clean with the opt-in `LNW_HAVOK_ENDOFSTEP_FIX=1` hook |
+
+`havok_endofstep_test` is also a standalone stress harness: it steps several worlds the way
+`MyPhysics.StepWorldsParallel` does, churns bodies with the game's lifetime sequences and
+checks the end-of-step callback list before every `FinishMtStep`. See the usage comment in
+`tests/havok_endofstep.cpp` for the scenarios and `tests/havok_endofstep_loop.sh` for a
+seeded soak. The game itself gets the fix from the Bugfixes plugin; the wrapper hook stays
+off unless `LNW_HAVOK_ENDOFSTEP_FIX` is set.
+
 Run them with:
 
 ```bash
