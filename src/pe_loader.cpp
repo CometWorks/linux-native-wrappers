@@ -2,7 +2,8 @@
 //
 // Two-pass linking:
 //   Pass 1: Parse headers, expand sections to virtual layout, register exports.
-//   Pass 2: Apply base relocations, resolve imports, set up TLS, resolve entry point.
+//   Pass 2: Apply base relocations, load PE imports found next to the image,
+//           resolve imports, set up TLS, resolve entry point.
 
 #include <asm/hwcap2.h>
 #include <asm/prctl.h>
@@ -692,8 +693,8 @@ static std::string sibling_path(const char *path, const char *name)
 // it in the application directory. It is linked and attached before its
 // importer, so the importer's DllMain sees an initialized dependency. Its
 // sidecar goes next to the importer's one. Returns false only when the file
-// exists but cannot be loaded; a missing file leaves the imports to the
-// "Unknown symbol" stubs as before.
+// exists but cannot be loaded; a missing file leaves its imports to the
+// "Unknown symbol" stubs.
 static bool load_sibling_import(pe_image *importer, const char *dll)
 {
     static std::vector<std::string> attempted;

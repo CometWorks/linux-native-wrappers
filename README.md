@@ -33,8 +33,9 @@ Loader-backed wrappers expose `Init(dllPath, sidecarPath)`. The first argument
 is the path to the matching Windows DLL. The second is an optional cache path
 for its ELF sidecar; the parent directory must be writable when the sidecar
 needs to be created or replaced. Call `Init` before using the wrapper's other
-exports. Physics, Slug, and Voxels enforce this explicitly. Wrappers do not
-search for game installations or DLLs.
+exports. Physics, Slug, Voxels, and KytheraV2 enforce this explicitly. Wrappers
+do not search for game installations or DLLs; the only other DLLs they load are
+PE imports found next to the DLL passed to `Init`, described below.
 
 This loader implements the Windows APIs used by these DLLs. It is not a general
 PE or Win32 runtime. It supports x86-64 PE32+ images and selected imports.
@@ -47,9 +48,9 @@ intentional: continuing would leave the process in an unknown state.
 
 ## Generated wrappers
 
-The Havok, Physics, Voxels, and KytheraV2 wrappers are generated from decompiled C#
-`DllImport` declarations. Their generated C++ files are committed, so building
-the project does not require decompiled sources.
+The Havok, Physics, Voxels, and KytheraV2 wrappers are generated from decompiled
+C# `DllImport` declarations. Their generated C++ files are committed, so
+building the project does not require decompiled sources.
 
 Each generator takes one decompiled source root. The root may contain the
 assembly directly, under `src/`, or be the assembly directory itself.
