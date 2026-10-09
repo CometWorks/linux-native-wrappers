@@ -237,6 +237,11 @@ ctest --test-dir build --output-on-failure
 | `BIN64/RecastDetour.dll` | `recast_detour` |
 | `BIN64/Havok.dll` | `pe_sidecar_generation`, `havok_unwind`, `havok_memory` |
 | `GAME2/VRage.Physics.Native.dll` | `physics_init` |
+| `GAME2/VRage.Voxels.Native.dll` and `VRage.Slug.Native.dll` | `voxels_teb` |
+
+`voxels_teb` calls the Voxels planet shape, then Slug, then the planet shape
+again on one thread. The second Voxels call must set up its own TEB again,
+because the planet shape reads a thread-local variable of the DLL.
 
 The Havok crash harness can also be run directly:
 

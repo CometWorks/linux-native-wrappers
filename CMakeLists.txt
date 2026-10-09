@@ -326,4 +326,21 @@ if(BUILD_TESTING)
                         "${CMAKE_BINARY_DIR}/physics-VRage.Physics.Native.dll")
         set_tests_properties(physics_init PROPERTIES TIMEOUT 120)
     endif()
+
+    if(GAME2 AND EXISTS "${GAME2}/VRage.Voxels.Native.dll"
+            AND EXISTS "${GAME2}/VRage.Slug.Native.dll")
+        # Opens both wrappers with dlopen, as the game does, instead of
+        # linking them: their exports, Init among them, have the same names.
+        add_executable(voxels_teb_test tests/voxels_teb.cpp)
+        target_link_libraries(voxels_teb_test PRIVATE ${CMAKE_DL_LIBS})
+        add_dependencies(voxels_teb_test Voxels Slug)
+        add_test(NAME voxels_teb
+                COMMAND voxels_teb_test
+                        "$<TARGET_FILE:Voxels>"
+                        "$<TARGET_FILE:Slug>"
+                        "${GAME2}/VRage.Voxels.Native.dll"
+                        "${GAME2}/VRage.Slug.Native.dll"
+                        "${CMAKE_BINARY_DIR}/voxels-teb-sidecars")
+        set_tests_properties(voxels_teb PROPERTIES TIMEOUT 120)
+    endif()
 endif()
