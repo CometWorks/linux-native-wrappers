@@ -27,7 +27,6 @@ static_assert(sizeof(DetailMapData) == 56);
 namespace {
 pe_image voxels_image;
 std::once_flag voxels_once;
-thread_local bool voxels_thread_ready;
 void *sysv_assertion_callback;
 
 void WINAPI assertion_bridge(const char *message)
@@ -47,16 +46,15 @@ uint64_t aggregate_bits(const T &value)
 
 void initialize(const char *dll_path, const char *sidecar_path);
 
+// Every call, not once per thread: each wrapper library points GS at its
+// own TEB, so a Physics or Slug call on this thread leaves GS on theirs.
 void ensure_thread_info()
 {
     if (!voxels_image.image)
         throw std::runtime_error("Voxels is not initialized; call Init first");
-    if (voxels_thread_ready)
-        return;
     if (!setup_nt_threadinfo(nullptr))
         std::abort();
     pe_ensure_tls_for_loaded_images();
-    voxels_thread_ready = true;
 }
 
 using IsoMesher_Calculate_t = void(WINAPI *)(void *, Vector3I *, void *, void *, AmbientOcclusionArgs *);
