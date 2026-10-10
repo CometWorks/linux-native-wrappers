@@ -7,10 +7,11 @@
 #   dist/se2-native-wrappers.tar.gz         SE2, Release (-O3 -DNDEBUG)
 #   dist/se1-native-wrappers.debug.tar.gz   SE1, Debug   (-O0 -g)
 #   dist/se2-native-wrappers.debug.tar.gz   SE2, Debug   (-O0 -g)
+#   dist/se{1,2}-native-wrappers.symbols.tar.gz  Symbols matching the optimized Release libraries
 #
-# Each archive holds only the libraries its game version loads, at the archive
-# root, with no subdirectory. The build workflow runs this script, so local and
-# published archives have the same names and layout.
+# Runtime archives hold only the libraries their game version loads, at the
+# archive root. Symbols archives contain matching .debug files and symbols.json.
+# The build workflow uses this script for the same local and published layout.
 #
 # Release is built and packaged first, Debug second. Each configuration starts
 # from `make clean`, so build/ is left holding the Debug libraries: local
@@ -21,8 +22,8 @@
 #
 #   ./build_and_package.sh
 #
-# Requires x86-64 Linux, CMake 3.13 or newer, Python 3, Make, and a
-# C++17-capable g++.
+# Requires x86-64 Linux, CMake 3.13 or newer, Python 3, Make,
+# C++17-capable g++, and GNU binutils (readelf, objcopy, strip).
 
 set -euo pipefail
 
@@ -64,9 +65,9 @@ endgroup() {
 }
 
 package_set() {
-    # package_set <staging dir> <archive> <lib>...
-    local staging="$1" archive="$2"
-    shift 2
+    # package_set <staging dir> <archive> <build type> <lib>...
+    local staging="$1" archive="$2" build_type="$3"
+    shift 3
 
     echo
     echo "==> Packaging $archive"
@@ -81,6 +82,12 @@ package_set() {
         fi
         install -m 0755 "$BUILD_DIR/$lib" "$staging/$lib"
     done
+
+    if [ "$build_type" = Release ]; then
+        # Only staged copies are stripped; build/ keeps the original compiler outputs intact.
+        python3 "$REPO_DIR/tools/package_symbols.py" "$staging" \
+            "$DIST_DIR/${archive%.tar.gz}.symbols.tar.gz" "$@"
+    fi
 
     # --sort=name plus a fixed mtime/owner make the archive byte-reproducible
     # for a given set of inputs, so an unchanged rebuild produces an identical
@@ -105,12 +112,12 @@ build_config() {
     make -C "$REPO_DIR" clean
     cmake -S "$REPO_DIR" -B "$BUILD_DIR" -G "Unix Makefiles" \
         -DCMAKE_BUILD_TYPE="$build_type"
-    cmake --build "$BUILD_DIR" -j "$(nproc)"
+    cmake --build "$BUILD_DIR" -j "${BUILD_JOBS:-$(nproc)}"
     ctest --test-dir "$BUILD_DIR" --output-on-failure
     endgroup
 
-    package_set "$DIST_DIR/staging-se1" "se1-native-wrappers$suffix.tar.gz" "${SE1_LIBS[@]}"
-    package_set "$DIST_DIR/staging-se2" "se2-native-wrappers$suffix.tar.gz" "${SE2_LIBS[@]}"
+    package_set "$DIST_DIR/staging-se1" "se1-native-wrappers$suffix.tar.gz" "$build_type" "${SE1_LIBS[@]}"
+    package_set "$DIST_DIR/staging-se2" "se2-native-wrappers$suffix.tar.gz" "$build_type" "${SE2_LIBS[@]}"
 }
 
 mkdir -p "$DIST_DIR"
@@ -118,6 +125,7 @@ mkdir -p "$DIST_DIR"
 # Release first, Debug last, so build/ ends up holding the Debug libraries.
 build_config Release ""
 build_config Debug   ".debug"
+python3 "$REPO_DIR/tools/verify_release.py" "$DIST_DIR"
 
 echo
 echo "==> Done. build/ holds the Debug libraries."

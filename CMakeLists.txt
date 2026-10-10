@@ -16,6 +16,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # __tls_get_addr, which avoids the problem for every present and future shim.
 # The tls_dialect and ms_abi_tls tests fail if this flag is dropped.
 add_compile_options(-mtls-dialect=gnu2)
+# Retain DWARF at the existing Release optimization level. Packaging moves it to a symbols archive.
+add_compile_options("$<$<CONFIG:Release>:-g>")
+add_link_options(-Wl,--build-id=sha1)
 
 # Define source files
 set(SOURCES
@@ -195,6 +198,8 @@ if(BUILD_TESTING)
             COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se1_generators.py)
     add_test(NAME se2_generators
             COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/se2_generators.py)
+    add_test(NAME package_symbols
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/package_symbols.py)
 
     find_package(Threads REQUIRED)
     add_executable(crt_qsort_test tests/crt_qsort.cpp)

@@ -96,7 +96,7 @@ cannot parse.
 The direct CMake build requires x86-64 Linux, CMake 3.13 or newer, Python 3,
 and a C++17-capable `g++`. The supplied Makefile uses a CMake preset and
 therefore requires CMake 3.21 or newer. The packaging script also uses Bash,
-GNU Make, GNU tar, and GNU coreutils.
+GNU Make, GNU tar, GNU coreutils, and GNU binutils (`readelf`, `objcopy`, `strip`).
 
 ```bash
 make
@@ -138,6 +138,7 @@ A normal build has these self-contained tests:
 | --- | --- |
 | `se1_generators` | SE1 generator callback patterns and committed source markers |
 | `se2_generators` | SE2 generators with synthetic C# declarations |
+| `package_symbols` | Sample ELF: Release symbol split, shipped hashes/build IDs, patched exports, behavior and reproducibility |
 | `thread_id_dll_attach` | PE thread attach, detach, TLS, and FLS lifetime |
 | `windows_memory` | Windows memory and runtime behavior |
 | `crt_qsort` | Shared-library ABI bridge; repeated, nested, concurrent and empty/single-item sorts |
@@ -178,16 +179,24 @@ exercise the dynamic resolver. Use the same environment setting when running
 The generator tests are smoke tests. They do not compare a full regeneration
 from the game assemblies with every committed wrapper.
 
+Run the packaging check independently with `python3 tests/package_symbols.py`.
+It compiles a tiny sample library and needs GNU binutils; it builds no wrappers.
+
 ## Packaging locally
 
 `build_and_package.sh` builds the project, runs CTest, and packages the wrappers
-in both configurations. It produces the four archives used by the release
+in both configurations. It produces the six archives used by the release
 workflow:
 
 ```bash
 ./build_and_package.sh
 ls dist/*.tar.gz
 ```
+
+Set `BUILD_JOBS=4` to bound compiler concurrency on memory-constrained machines.
+Packaging verifies all six archives and writes `dist/release-manifest.json` with
+their exact SHA-256 hashes and source commit. Repeat the check independently with
+`python3 tools/verify_release.py dist`; it reads ELF metadata without loading wrappers.
 
 It builds and packages Release first, then Debug, starting each configuration
 from `make clean`. The archives land in `dist/`, which is excluded from Git,
@@ -269,6 +278,8 @@ its game version loads, as listed in [Libraries built](#libraries-built):
 | `se2-native-wrappers.tar.gz` | SE2 | Release (`-O3 -DNDEBUG`) |
 | `se1-native-wrappers.debug.tar.gz` | SE1 | Debug (`-O0 -g`) |
 | `se2-native-wrappers.debug.tar.gz` | SE2 | Debug (`-O0 -g`) |
+| `se1-native-wrappers.symbols.tar.gz` | SE1 | Split symbols matching the optimized Release libraries |
+| `se2-native-wrappers.symbols.tar.gz` | SE2 | Split symbols matching the optimized Release libraries |
 
 A push to `main` publishes a public `v1.0.<run>` release and marks it as the
 latest release. For a non-draft pull request, the workflow maintains a draft
@@ -279,6 +290,31 @@ Pulsar for Linux and Magnetar consume `se1-native-wrappers.tar.gz` by asset
 name. The Debug archives retain symbols for debugging. These per-game archives
 replaced the single combined `linux-native-wrappers.tar.gz`, which releases no
 longer carry.
+
+### Matching Release symbols
+
+Release compilation retains `-O3 -DNDEBUG` and adds `-g` plus an ELF build ID.
+Packaging copies the libraries to staging, extracts DWARF into `.so.debug` files,
+then runs `strip --strip-debug` and adds a GNU debuglink to each staged library.
+Runtime downloads contain no DWARF. These operations change ELF file bytes while
+preserving executable code and runtime behavior; they do not strip the original
+compiler outputs in `build/`. The packaging script subsequently cleans that
+directory before its existing Debug build.
+
+Each symbols archive contains the matching `.so.debug` files and `symbols.json`.
+The manifest records the source commit, ELF build IDs, symbol-file SHA-256 hashes,
+and SHA-256 hashes of the **shipped libraries after stripping and debuglink**.
+Compare the runtime library using `sha256sum libHavok.so` and
+`readelf -n libHavok.so` before selecting symbols. Extract its exact release's
+symbols archive alongside the runtime libraries (or put the `.debug` files in
+their `.debug/` subdirectory) so GDB can follow the GNU debuglinks.
+
+Retain the exact runtime and symbols assets together for every release under
+investigation. A separately compiled Debug (`-O0`) archive cannot symbolize the
+optimized Release code, and rebuilding the same source later does not guarantee
+matching binaries. These assets enable symbolication for new releases; they do
+not recover DWARF omitted from older releases. Loaded Windows DLLs still require
+their own matching symbols; wrapper DWARF does not supply those.
 
 ## License
 
