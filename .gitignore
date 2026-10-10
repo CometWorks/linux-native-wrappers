@@ -9,6 +9,7 @@
 /out/
 /out-*/
 /dist/
+/validation/
 
 # Python bytecode caches.
 __pycache__/

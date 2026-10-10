@@ -6,7 +6,7 @@ name: Build
 # consume the resulting archives.
 #
 #   * push to main        -> build, then publish a PUBLIC release tagged
-#                            v1.0.<run_number> and marked "latest". All four
+#                            v1.0.<run_number> and marked "latest". All six
 #                            tar.gz assets are attached.
 #   * non-draft pull request activity
 #                          -> build, then publish a DRAFT release (not public,
@@ -17,15 +17,17 @@ name: Build
 # Building, testing and packaging are done by ./build_and_package.sh, the same
 # script used for local builds. Local and published archives have the same names
 # and layout. It builds and tests the Release and Debug configurations and
-# writes four archives under dist/, one per game and configuration:
+# writes six archives under dist/, per game and configuration plus Release symbols:
 #
 #   * Release (-O3 -DNDEBUG) -> se1-native-wrappers.tar.gz         (primary)
 #                               se2-native-wrappers.tar.gz         (primary)
 #   * Debug   (-O0 -g)       -> se1-native-wrappers.debug.tar.gz
 #                               se2-native-wrappers.debug.tar.gz
+#   * Release symbols      -> se1-native-wrappers.symbols.tar.gz
+#                               se2-native-wrappers.symbols.tar.gz
 #
 # The wrappers are split per game, so a consumer only downloads the libraries
-# its own game version loads. All four are attached to the same release;
+# its own game version loads. All six are attached to the same release;
 # consumers pull the release asset by name. This layout replaced the single
 # combined linux-native-wrappers archive, which is no longer published.
 #
@@ -56,7 +58,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake make g++
+            build-essential cmake make g++ binutils
 
       - name: Build and package native wrappers (Release + Debug)
         run: ./build_and_package.sh
@@ -70,6 +72,9 @@ jobs:
             dist/se2-native-wrappers.tar.gz
             dist/se1-native-wrappers.debug.tar.gz
             dist/se2-native-wrappers.debug.tar.gz
+            dist/se1-native-wrappers.symbols.tar.gz
+            dist/se2-native-wrappers.symbols.tar.gz
+            dist/release-manifest.json
           if-no-files-found: error
 
       - name: Publish release
@@ -82,6 +87,9 @@ jobs:
             "dist/se2-native-wrappers.tar.gz"
             "dist/se1-native-wrappers.debug.tar.gz"
             "dist/se2-native-wrappers.debug.tar.gz"
+            "dist/se1-native-wrappers.symbols.tar.gz"
+            "dist/se2-native-wrappers.symbols.tar.gz"
+            "dist/release-manifest.json"
           )
 
           if [ "${{ github.event_name }}" = "push" ]; then
