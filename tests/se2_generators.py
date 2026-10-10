@@ -19,6 +19,7 @@ def load(name):
 pinvoke = load("csharp_pinvoke")
 physics = load("generate_physics_wrapper")
 voxels = load("generate_voxels_wrapper")
+kythera = load("generate_kythera_wrapper")
 
 source = '''
 using System.Runtime.InteropServices;
@@ -83,3 +84,20 @@ assert "thread_local" not in voxels_source
 slug_source = (root / "src" / "Slug.cpp").read_text(encoding="utf-8")
 assert "Slug Init requires a DLL path" in slug_source
 assert 'getenv("HOME")' not in slug_source
+
+assert kythera.lower_type("double[]") == {"kind": "ptr"}
+assert kythera.lower_type("KytV2_ObstacleData*") == {"kind": "ptr"}
+assert kythera.lower_type("int", modifier="out") == {"kind": "ptr"}
+kythera_source = kythera.emit(kythera.load_signatures([
+    {"entry_point": "KytV2_CreateCore", "name": "KytV2_CreateCore", "ret": "nint",
+     "return_i1": False,
+     "params": [{"modifier": "ref", "type": "BridgeCallbacks", "name": "callbacks"}]},
+    {"entry_point": "KytV2_StartUpdate", "name": "KytV2_StartUpdate", "ret": "void",
+     "return_i1": False,
+     "params": [{"modifier": None, "type": "nint", "name": "core"},
+                {"modifier": None, "type": "double", "name": "deltaTimeSeconds"}]},
+]))
+assert "KytheraV2 Init requires a DLL path" in kythera_source
+assert "return pKytV2_CreateCore(&pe_callbacks);" in kythera_source
+assert "pKytV2_StartUpdate(core, deltaTimeSeconds);" in kythera_source
+assert "thread_local" not in kythera_source

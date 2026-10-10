@@ -7,9 +7,8 @@ between the System V and Microsoft x64 ABIs, and implement the Win32 and CRT
 functions those DLLs need. Events and semaphores use ntsync when `/dev/ntsync`
 is available, with Linux synchronization primitives as the fallback.
 
-KytheraV2 and PlatformWindows are exceptions. KytheraV2 is a compatibility
-stub with no navigation implementation. PlatformWindows is a native presenter
-adapter and does not load a Windows DLL.
+PlatformWindows is an exception. It is a native presenter adapter and does
+not load a Windows DLL.
 
 ## Libraries built
 
@@ -19,7 +18,7 @@ adapter and does not load a Windows DLL.
 | `libRecastDetour.so` | SE1 | Loads `RecastDetour.dll` for navmesh |
 | `libVRageNative.so` | SE1 | Loads `VRage.Native.dll` for voxels |
 | `libD3DCompiler.so` | SE1 | Loads `d3dcompiler_47.dll` for shader compilation |
-| `libVRage.KytheraV2.Native.so` | SE2 | Provides the KytheraV2 compatibility stub |
+| `libVRage.KytheraV2.Native.so` | SE2 | Loads `VRage.KytheraV2.Native.dll` and its `Kythera_*.dll` imports for AI navigation |
 | `libVRage.Platform.Windows.Native.so` | SE2 | Provides the native presenter adapter |
 | `libVRage.Slug.Native.so` | SE2 | Loads `VRage.Slug.Native.dll` for text rendering |
 | `libVRage.Physics.Native.so` | SE2 | Loads `VRage.Physics.Native.dll` for physics |
@@ -34,20 +33,24 @@ Loader-backed wrappers expose `Init(dllPath, sidecarPath)`. The first argument
 is the path to the matching Windows DLL. The second is an optional cache path
 for its ELF sidecar; the parent directory must be writable when the sidecar
 needs to be created or replaced. Call `Init` before using the wrapper's other
-exports. Physics, Slug, and Voxels enforce this explicitly. Wrappers do not
-search for game installations or DLLs.
+exports. Physics, Slug, Voxels, and KytheraV2 enforce this explicitly. Wrappers
+do not search for game installations or DLLs; the only other DLLs they load are
+PE imports found next to the DLL passed to `Init`, described below.
 
 This loader implements the Windows APIs used by these DLLs. It is not a general
 PE or Win32 runtime. It supports x86-64 PE32+ images and selected imports.
+A PE import that is not a shimmed module and sits next to the importing DLL is
+loaded from there, linked and attached first, and gets its own sidecar next to
+the importer's one. KytheraV2 loads 16 `Kythera_*.dll` files this way.
 Unsupported imports use trap stubs, MSVC exception boundaries abort the
 process, and loaded PE images cannot be unloaded safely. These failures are
 intentional: continuing would leave the process in an unknown state.
 
 ## Generated wrappers
 
-The Havok, Physics, and Voxels wrappers are generated from decompiled C#
-`DllImport` declarations. Their generated C++ files are committed, so building
-the project does not require decompiled sources.
+The Havok, Physics, Voxels, and KytheraV2 wrappers are generated from decompiled
+C# `DllImport` declarations. Their generated C++ files are committed, so
+building the project does not require decompiled sources.
 
 Each generator takes one decompiled source root. The root may contain the
 assembly directly, under `src/`, or be the assembly directory itself.
@@ -56,11 +59,12 @@ assembly directly, under `src/`, or be the assembly directory itself.
 python3 tools/generate_havok_wrapper.py /path/to/se1/decompiled
 python3 tools/generate_physics_wrapper.py /path/to/se2/decompiled
 python3 tools/generate_voxels_wrapper.py /path/to/se2/decompiled
+python3 tools/generate_kythera_wrapper.py /path/to/se2/decompiled
 ```
 
 These commands rewrite `src/Havok.cpp`, `src/Physics.cpp`,
-`src/Physics.exports`, and `src/Voxels.cpp` as applicable. Run the generator
-smoke tests after regeneration:
+`src/Physics.exports`, `src/Voxels.cpp`, and `src/KytheraV2.cpp` as applicable.
+Run the generator smoke tests after regeneration:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -73,6 +77,15 @@ System V ABI on Linux. The generated wrapper uses one fixed bridge for each
 static semantic callback, serialized bridges for the two callbacks that live
 only for a native call, and three shared bridges for phantom shapes. Phantom
 callbacks are routed through a map keyed by the native shape pointer.
+
+### KytheraV2 callbacks
+
+`KytV2_CreateCore` receives the managed callback table. The wrapper passes the
+bridge its own long-lived copy, with an `ms_abi` bridge to the managed
+`RequestBackgroundWork` delegate, and rejects the four memory callbacks, which
+the game leaves null. Kythera returns navmesh triangles, paths and cover points
+in `CoTaskMemAlloc` buffers. The shim allocates them with `malloc`, because .NET
+frees them with `free` through `Marshal.FreeCoTaskMem`.
 
 ### Decorated SE2 exports
 
@@ -238,10 +251,17 @@ ctest --test-dir build --output-on-failure
 | `BIN64/Havok.dll` | `pe_sidecar_generation`, `havok_unwind`, `havok_memory` |
 | `GAME2/VRage.Physics.Native.dll` | `physics_init` |
 | `GAME2/VRage.Voxels.Native.dll` and `VRage.Slug.Native.dll` | `voxels_teb` |
+| `GAME2/VRage.KytheraV2.Native.dll` | `kythera_lifecycle` |
 
 `voxels_teb` calls the Voxels planet shape, then Slug, then the planet shape
 again on one thread. The second Voxels call must set up its own TEB again,
 because the planet shape reads a thread-local variable of the DLL.
+
+`kythera_lifecycle` runs the startup, update and teardown calls of
+`KytheraCore`, builds a ground navmesh on a test quad and queries a path on it,
+then updates a surface agent while GS points at another TEB, as it does after a
+Physics or Slug call on the same thread. It fails on any unknown or ordinal
+import.
 
 The Havok crash harness can also be run directly:
 
