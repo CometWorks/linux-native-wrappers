@@ -4,6 +4,7 @@
 //   Pass 1: Parse headers, expand sections to virtual layout, register exports.
 //   Pass 2: Apply base relocations, resolve imports, set up TLS, resolve entry point.
 
+#include <asm/hwcap2.h>
 #include <asm/prctl.h>
 #include <asm/unistd.h>
 #include <algorithm>
@@ -18,10 +19,12 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <immintrin.h>
 #include <link.h>
 #include <mutex>
 #include <pthread.h>
 #include <string>
+#include <sys/auxv.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1060,6 +1063,21 @@ static inline void apply_windows_fpu_state()
         _mm_setcsr(csr | FtzDaz);
 }
 
+// Each wrapper library has its own TEB, so GS has to be pointed at ours on
+// every call, but the arch_prctl syscall costs about 100 ns. With FSGSBASE
+// enabled for user space (Linux 5.9+), rdgsbase reads the current GS base
+// cheaply, and the syscall is only needed when GS points elsewhere.
+static bool fsgsbase_enabled()
+{
+    static const bool enabled = getauxval(AT_HWCAP2) & HWCAP2_FSGSBASE;
+    return enabled;
+}
+
+__attribute__((target("fsgsbase"))) static void *read_gs_base()
+{
+    return reinterpret_cast<void *>(_readgsbase_u64());
+}
+
 bool setup_nt_threadinfo(PEXCEPTION_HANDLER handler)
 {
     static PEB ProcessEnvironmentBlock = {
@@ -1106,6 +1124,8 @@ bool setup_nt_threadinfo(PEXCEPTION_HANDLER handler)
     }
 
     // Set GS base to point at our TEB so Windows gs:[offset] accesses work
+    if (fsgsbase_enabled() && read_gs_base() == &teb)
+        return true;
     long result = syscall(__NR_arch_prctl, ARCH_SET_GS, &teb);
     if (result != 0) {
         LogMessageA("Failed to set GS base (ARCH_SET_GS). Error: %d", errno);
