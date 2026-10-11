@@ -207,12 +207,17 @@ if(BUILD_TESTING)
     add_test(NAME crt_qsort COMMAND crt_qsort_test)
     set_tests_properties(crt_qsort PROPERTIES TIMEOUT 10)
 
-    add_executable(thread_id_dll_attach_test
-            ${SOURCES}
-            tests/thread_id_dll_attach.cpp
-    )
-    target_compile_definitions(thread_id_dll_attach_test PRIVATE NATIVE_WRAPPERS_TESTING)
-    target_link_libraries(thread_id_dll_attach_test PRIVATE c ${CMAKE_DL_LIBS})
+    # The shared sources built like a wrapper library, plus the test-only hooks
+    # of NATIVE_WRAPPERS_TESTING. Kept out of build/ so it is never deployed.
+    add_library(NativeWrappersTesting SHARED ${SOURCES})
+    target_compile_definitions(NativeWrappersTesting PUBLIC NATIVE_WRAPPERS_TESTING)
+    target_compile_options(NativeWrappersTesting PRIVATE -Wall -fpermissive -fPIC)
+    target_link_libraries(NativeWrappersTesting PRIVATE c ${CMAKE_DL_LIBS})
+    set_target_properties(NativeWrappersTesting PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+
+    add_executable(thread_id_dll_attach_test tests/thread_id_dll_attach.cpp)
+    target_link_libraries(thread_id_dll_attach_test PRIVATE NativeWrappersTesting)
     target_compile_options(thread_id_dll_attach_test PRIVATE -Wall -fpermissive)
     add_test(NAME thread_id_dll_attach COMMAND thread_id_dll_attach_test)
     set_tests_properties(thread_id_dll_attach PROPERTIES TIMEOUT 5)
