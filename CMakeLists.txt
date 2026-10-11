@@ -208,7 +208,8 @@ if(BUILD_TESTING)
     set_tests_properties(crt_qsort PROPERTIES TIMEOUT 10)
 
     # The shared sources built like a wrapper library, plus the test-only hooks
-    # of NATIVE_WRAPPERS_TESTING. Kept out of build/ so it is never deployed.
+    # of NATIVE_WRAPPERS_TESTING. Built into build/tests/, so the release
+    # packaging and the build/*.so deploy globs skip it.
     add_library(NativeWrappersTesting SHARED ${SOURCES})
     target_compile_definitions(NativeWrappersTesting PUBLIC NATIVE_WRAPPERS_TESTING)
     target_compile_options(NativeWrappersTesting PRIVATE -Wall -fpermissive -fPIC)

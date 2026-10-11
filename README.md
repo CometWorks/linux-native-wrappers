@@ -146,12 +146,12 @@ A normal build has these self-contained tests:
 | `ntsync_init_event`, `ntsync_init_semaphore` | Each API initializes ntsync independently in a fresh process and completes a shared-library round trip when the device is accessible |
 | `ms_abi_tls` | An `ms_abi` function in a shared library keeps register values across a thread-local access, with dynamic TLS resolution forced |
 
-The C++ tests link the wrapper shared libraries rather than compiling the sources into
-the test executable. In an executable the compiler uses static TLS models, so a
+No C++ test compiles the wrapper sources into its executable; they link or load shared
+libraries instead. In an executable the compiler uses static TLS models, so a
 miscompiled dynamic TLS access in the libraries would never show up.
 `thread_id_dll_attach` needs the test-only hooks behind `NATIVE_WRAPPERS_TESTING`; it
 links `build/tests/libNativeWrappersTesting.so`, the shared sources built as a library
-with those hooks, which is never packaged or deployed.
+with those hooks. The release packaging and the `build/*.so` deploy globs skip it.
 
 With `BIN64` pointing at the game's `Bin64`, the Havok tests also run against the real
 `Havok.dll`:
