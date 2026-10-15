@@ -90,8 +90,18 @@ struct SEIncludeVtbl {
     pfnIncludeClose Close;
 };
 
+// The vtable of an ID3DInclude made on the Linux side, such as SharpDX's
+// managed Include shadow: its methods use the Linux calling convention.
+typedef int32_t (*pfnSysvIncludeOpen)(
+    void *self, uint32_t includeType, const char *fileName,
+    const void *parentData, const void **ppData, uint32_t *pBytes);
+typedef int32_t (*pfnSysvIncludeClose)(void *self, const void *pData);
+
 struct SEIncludeHandler {
     const SEIncludeVtbl *vtbl; // must stay first: this object is the ID3DInclude*
+    // When set, Open and Close are passed on to this Linux-ABI ID3DInclude
+    // instead of resolving files here.
+    void *forward = nullptr;
     std::string basePath;
     std::vector<std::string> includeDirs;
     std::mutex mutex;
@@ -228,6 +238,9 @@ static WINAPI int32_t IncludeOpen(
     const void *parentData, const void **ppData, uint32_t *pBytes)
 {
     auto *handler = (SEIncludeHandler *)self;
+    if (handler->forward)
+        return ((pfnSysvIncludeOpen)vtable_slot(handler->forward, 0))(
+            handler->forward, includeType, fileName, parentData, ppData, pBytes);
     if (!fileName || !ppData || !pBytes)
         return SE_E_FAIL;
 
@@ -293,6 +306,8 @@ static WINAPI int32_t IncludeOpen(
 static WINAPI int32_t IncludeClose(void *self, const void *pData)
 {
     auto *handler = (SEIncludeHandler *)self;
+    if (handler->forward)
+        return ((pfnSysvIncludeClose)vtable_slot(handler->forward, 1))(handler->forward, pData);
     if (pData) {
         {
             std::lock_guard<std::mutex> lock(handler->mutex);
@@ -352,6 +367,16 @@ void* SE_CreateIncludeHandler(const char *basePath, const char *includeDir)
         handler->basePath = basePath;
     if (includeDir)
         handler->includeDirs.push_back(includeDir);
+    return handler;
+}
+
+// Wraps an ID3DInclude whose vtable uses the Linux calling convention, so the
+// PE-loaded compiler can call it. Free it with SE_DestroyIncludeHandler.
+void* SE_CreateForwardingIncludeHandler(void *include)
+{
+    auto *handler = new SEIncludeHandler();
+    handler->vtbl = &g_includeVtbl;
+    handler->forward = include;
     return handler;
 }
 

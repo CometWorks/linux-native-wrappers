@@ -249,7 +249,7 @@ ctest --test-dir build --output-on-failure
 
 | Option and required file | Added tests |
 | --- | --- |
-| `BIN64/d3dcompiler_47.dll` | `d3dcompiler_preprocess` |
+| `BIN64/d3dcompiler_47.dll` | `d3dcompiler_preprocess`, `d3dcompiler_diagnostics`, `d3dcompiler_forward_include` |
 | `BIN64/RecastDetour.dll` | `recast_detour` |
 | `BIN64/Havok.dll` | `pe_sidecar_generation`, `havok_unwind`, `havok_memory` |
 | `GAME2/VRage.Physics.Native.dll` | `physics_init` |
