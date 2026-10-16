@@ -139,6 +139,12 @@ set_target_properties(Voxels PROPERTIES
 # Link libraries (if any)
 target_link_libraries(RecastDetour PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(Havok PRIVATE c ${CMAKE_DL_LIBS})
+# Research builds only: count calls per export and callback, see
+# src/havok_call_counts.h. Never ship a counting build.
+option(HAVOK_CALL_COUNTS "Count Havok wrapper calls per export" OFF)
+if(HAVOK_CALL_COUNTS)
+    target_compile_definitions(Havok PRIVATE HAVOK_CALL_COUNTS)
+endif()
 target_link_libraries(VRageNative PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(D3DCompiler PRIVATE c ${CMAKE_DL_LIBS})
 target_link_libraries(KytheraV2 PRIVATE c)

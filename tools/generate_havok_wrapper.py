@@ -220,6 +220,7 @@ PREAMBLE = '''#include <cstdint>
 #include <unordered_map>
 
 #include "dll_loader.h"
+#include "havok_call_counts.h"
 
 #define DECLARE_FUNCTION_POINTER(func) static WINAPI func##_t p##func = nullptr;
 
@@ -266,6 +267,7 @@ using phantom_delete_sysv_t = void (*)(void *);
 
 static void WINAPI phantom_enter_bridge(void *shape, void *body)
 {
+    HAVOK_COUNT_CALL("callback:phantom_enter")
     auto target = get_phantom_callbacks(shape, false).enter;
     if (target) {
         reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
@@ -274,6 +276,7 @@ static void WINAPI phantom_enter_bridge(void *shape, void *body)
 
 static void WINAPI phantom_leave_bridge(void *shape, void *body)
 {
+    HAVOK_COUNT_CALL("callback:phantom_leave")
     auto target = get_phantom_callbacks(shape, false).leave;
     if (target) {
         reinterpret_cast<phantom_handler_sysv_t>(target)(shape, body);
@@ -282,6 +285,7 @@ static void WINAPI phantom_leave_bridge(void *shape, void *body)
 
 static void WINAPI phantom_delete_bridge(void *shape)
 {
+    HAVOK_COUNT_CALL("callback:phantom_delete")
     auto target = get_phantom_callbacks(shape, true).del;
     if (target) {
         reinterpret_cast<phantom_delete_sysv_t>(target)(shape);
@@ -455,6 +459,7 @@ def emit_callback_helpers(specs):
         lines.extend([
             f'static {ret} WINAPI {name}_bridge({params})',
             '{',
+            f'    HAVOK_COUNT_CALL("callback:{name}")',
             f'    auto fn = reinterpret_cast<{name}_sysv_t>(',
             f'        g_{name}_target.load(std::memory_order_acquire));',
             '    if (!fn) {',
@@ -539,7 +544,7 @@ def emit_wrapper(sig):
     name = sig['name']
     arg_names = '' if name == PHANTOM_CALLBACK_CREATE else ', '.join(
         map_call_arg(name, t, n) for t, n in sig['args'])
-    lines = [f'{ret} {name}({params}) {{ EnsureThreadInfo();']
+    lines = [f'{ret} {name}({params}) {{ HAVOK_COUNT_CALL("{name}") EnsureThreadInfo();']
     lines.append(f'    REQUIRE_FUNCTION_POINTER({name})')
     if name == PHANTOM_CALLBACK_CREATE:
         enter, leave, delete = (arg_name for _, arg_name in sig['args'])
