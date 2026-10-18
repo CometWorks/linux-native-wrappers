@@ -275,6 +275,12 @@ if(BUILD_TESTING)
                         "$<TARGET_FILE:d3dcompiler_tool>"
                         "${BIN64}/d3dcompiler_47.dll")
         set_tests_properties(d3dcompiler_diagnostics PROPERTIES TIMEOUT 60)
+
+        add_executable(d3dcompiler_forward_include_test tests/d3dcompiler_forward_include.cpp)
+        target_link_libraries(d3dcompiler_forward_include_test PRIVATE D3DCompiler)
+        add_test(NAME d3dcompiler_forward_include
+                COMMAND d3dcompiler_forward_include_test "${BIN64}/d3dcompiler_47.dll")
+        set_tests_properties(d3dcompiler_forward_include PROPERTIES TIMEOUT 60)
     endif()
 
     if(BIN64 AND EXISTS "${BIN64}/RecastDetour.dll")
