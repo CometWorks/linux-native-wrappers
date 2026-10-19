@@ -82,7 +82,7 @@ placeholders. Post-build scripts replace those names in the ELF dynamic string
 table and rebuild its System V symbol hash.
 
 Physics records exact placeholder-to-export mappings in
-`src/Physics.exports`. Slug has 13 known exports and derives each final name by
+`src/Physics.exports`. Slug has 14 known exports and derives each final name by
 replacing `$` with `@`, so it does not need a manifest. CMake runs both renamers
 automatically and fails the build if the expected symbols are not found.
 

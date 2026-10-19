@@ -31,6 +31,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <linux/futex.h>
 #include <linux/ntsync.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -1906,6 +1907,97 @@ WINAPI void msvcp__Xlength_error(const char *msg) { (void)msg; unsupported_msvc_
 WINAPI void msvcp__Thrd_yield() { sched_yield(); }
 WINAPI void msvcp__Xbad_alloc() { unsupported_msvc_exception("_Xbad_alloc"); }
 
+// std::mutex support of MSVCP140. The STL hands us the mutex storage it embeds in the
+// std::mutex object (at least 32 bytes in every MSVC STL layout) and only touches it through
+// these exports. Our layout: type flags, a futex word, the owning thread and the lock count.
+namespace {
+struct msvc_mutex {
+    int type;
+    std::atomic<int> futex;
+    uint64_t unused;
+    std::atomic<DWORD> owner;
+    int count;
+};
+static_assert(sizeof(msvc_mutex) <= 32);
+
+constexpr int msvc_mutex_recursive = 0x100;
+
+void futex_lock(std::atomic<int> &word)
+{
+    int state = 0;
+    if (word.compare_exchange_strong(state, 1, std::memory_order_acquire))
+        return;
+    if (state != 2)
+        state = word.exchange(2, std::memory_order_acquire);
+    while (state != 0) {
+        syscall(SYS_futex, &word, FUTEX_WAIT_PRIVATE, 2, nullptr, nullptr, 0);
+        state = word.exchange(2, std::memory_order_acquire);
+    }
+}
+
+bool futex_try_lock(std::atomic<int> &word)
+{
+    int state = 0;
+    return word.compare_exchange_strong(state, 1, std::memory_order_acquire);
+}
+
+void futex_unlock(std::atomic<int> &word)
+{
+    if (word.exchange(0, std::memory_order_release) == 2)
+        syscall(SYS_futex, &word, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
+}
+}
+
+WINAPI void msvcp__Mtx_init_in_situ(msvc_mutex *mutex, int type)
+{
+    mutex->type = type;
+    mutex->futex.store(0, std::memory_order_relaxed);
+    mutex->owner.store(0, std::memory_order_relaxed);
+    mutex->count = 0;
+}
+
+WINAPI void msvcp__Mtx_destroy_in_situ(msvc_mutex *mutex) { (void)mutex; }
+
+WINAPI int msvcp__Mtx_lock(msvc_mutex *mutex)
+{
+    DWORD self = GetCurrentThreadId();
+    if (mutex->owner.load(std::memory_order_relaxed) == self) {
+        if ((mutex->type & msvc_mutex_recursive) == 0)
+            unsupported_msvc_exception("_Mtx_lock (relock of a non-recursive mutex)");
+    } else {
+        futex_lock(mutex->futex);
+        mutex->owner.store(self, std::memory_order_relaxed);
+    }
+    mutex->count++;
+    return 0;
+}
+
+WINAPI int msvcp__Mtx_trylock(msvc_mutex *mutex)
+{
+    DWORD self = GetCurrentThreadId();
+    if (mutex->owner.load(std::memory_order_relaxed) == self) {
+        if ((mutex->type & msvc_mutex_recursive) == 0)
+            return 3; // _Thrd_result::_Busy
+    } else {
+        if (!futex_try_lock(mutex->futex))
+            return 3;
+        mutex->owner.store(self, std::memory_order_relaxed);
+    }
+    mutex->count++;
+    return 0;
+}
+
+WINAPI int msvcp__Mtx_unlock(msvc_mutex *mutex)
+{
+    if (--mutex->count == 0) {
+        mutex->owner.store(0, std::memory_order_relaxed);
+        futex_unlock(mutex->futex);
+    }
+    return 0;
+}
+
+WINAPI void msvcp__Throw_C_error(int code) { unsupported_msvc_exception("_Throw_C_error", static_cast<DWORD>(code)); }
+
 WINAPI void msvcr_operator_delete_array(void *ptr) { crt_free(ptr); }
 WINAPI int msvcr_sprintf_s(char *buffer, size_t sizeOfBuffer, const char *format, ULONG_PTR a1 = 0, ULONG_PTR a2 = 0, ULONG_PTR a3 = 0, ULONG_PTR a4 = 0, ULONG_PTR a5 = 0, ULONG_PTR a6 = 0, ULONG_PTR a7 = 0, ULONG_PTR a8 = 0) {
     return snprintf(buffer, sizeOfBuffer, format, a1, a2, a3, a4, a5, a6, a7, a8);
@@ -2154,6 +2246,24 @@ WINAPI short crt__fdtest(float *px) {
     return -1;                     // _FINITE
 }
 WINAPI float crt_acosf(float x) { return std::acos(x); }
+WINAPI short crt__fdclass(float x) {
+    switch (std::fpclassify(x)) {
+    case FP_INFINITE: return 1;   // FP_INFINITE
+    case FP_NAN: return 2;        // FP_NAN
+    case FP_ZERO: return 0;       // FP_ZERO
+    case FP_SUBNORMAL: return -2; // FP_SUBNORMAL
+    default: return -1;           // FP_NORMAL
+    }
+}
+WINAPI FILE *crt___acrt_iob_func(unsigned index) { return index == 0 ? stdin : index == 1 ? stdout : stderr; }
+WINAPI int crt_fflush(FILE *stream) { return std::fflush(stream); }
+// Wide formatted output only reaches Havok's diagnostic reports. The format string is written
+// as-is (UTF-16 narrowed to UTF-8) without substituting arguments.
+WINAPI int crt___stdio_common_vfwprintf(uint64_t options, FILE *stream, const WCHAR *format, void *locale, va_list args) {
+    if (!stream || !format) return -1;
+    std::string text = narrow_utf16_string(format);
+    return std::fputs(text.c_str(), stream) < 0 ? -1 : static_cast<int>(text.size());
+}
 
 // msvcrt.dll stubs for d3dcompiler_47.dll
 
@@ -2814,6 +2924,42 @@ WINAPI DWORD GetFullPathNameW(const WCHAR *lpFileName, DWORD nBufferLength, WCHA
     return static_cast<DWORD>(len);
 }
 WINAPI void Sleep(DWORD dwMilliseconds) { usleep(dwMilliseconds * 1000); }
+WINAPI DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable) { usleep(dwMilliseconds * 1000); return 0; }
+// CreateThread starts threads right away, so a suspended thread is already running.
+WINAPI DWORD ResumeThread(HANDLE hThread) { return 1; }
+WINAPI BOOL SetThreadPriority(HANDLE hThread, int nPriority) { return TRUE; }
+WINAPI ULONG_PTR SetThreadAffinityMask(HANDLE hThread, ULONG_PTR dwThreadAffinityMask) { return ~ULONG_PTR{0}; }
+WINAPI DWORD QueueUserAPC(void *pfnAPC, HANDLE hThread, ULONG_PTR dwData) { return 0; }
+WINAPI UINT GetErrorMode() { return 0; }
+WINAPI UINT SetErrorMode(UINT uMode) { return 0; }
+WINAPI HMODULE LoadLibraryW(const WCHAR *lpLibFileName) { return nullptr; }
+WINAPI BOOL CancelIo(HANDLE hFile) { return TRUE; }
+WINAPI BOOL ReadDirectoryChangesW(HANDLE hDirectory, void *lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, DWORD *lpBytesReturned, void *lpOverlapped, void *lpCompletionRoutine) { return FALSE; }
+WINAPI HANDLE FindFirstFileExW(const WCHAR *lpFileName, int fInfoLevelId, void *lpFindFileData, int fSearchOp, void *lpSearchFilter, DWORD dwAdditionalFlags) { return INVALID_HANDLE_VALUE; }
+WINAPI BOOL GetComputerNameW(WCHAR *lpBuffer, DWORD *nSize) {
+    char name[256] = {};
+    if (!lpBuffer || !nSize || gethostname(name, sizeof(name) - 1) != 0) return FALSE;
+    DWORD len = static_cast<DWORD>(std::strlen(name));
+    if (*nSize <= len) { *nSize = len + 1; return FALSE; }
+    for (DWORD i = 0; i <= len; i++) lpBuffer[i] = static_cast<unsigned char>(name[i]);
+    *nSize = len;
+    return TRUE;
+}
+WINAPI BOOL CopyFileW(const WCHAR *lpExistingFileName, const WCHAR *lpNewFileName, BOOL bFailIfExists) {
+    std::error_code ec;
+    auto options = bFailIfExists ? std::filesystem::copy_options::none : std::filesystem::copy_options::overwrite_existing;
+    return std::filesystem::copy_file(wide_to_string(lpExistingFileName), wide_to_string(lpNewFileName), options, ec) ? TRUE : FALSE;
+}
+WINAPI BOOL MoveFileExW(const WCHAR *lpExistingFileName, const WCHAR *lpNewFileName, DWORD dwFlags) {
+    std::error_code ec;
+    if (!lpNewFileName) return std::filesystem::remove(wide_to_string(lpExistingFileName), ec) ? TRUE : FALSE;
+    std::filesystem::rename(wide_to_string(lpExistingFileName), wide_to_string(lpNewFileName), ec);
+    return ec ? FALSE : TRUE;
+}
+WINAPI BOOL RemoveDirectoryW(const WCHAR *lpPathName) {
+    std::error_code ec;
+    return std::filesystem::remove(wide_to_string(lpPathName), ec) ? TRUE : FALSE;
+}
 WINAPI int LCMapStringW(DWORD Locale, DWORD dwMapFlags, const WCHAR *lpSrcStr, int cchSrc, WCHAR *lpDestStr, int cchDest) {
     if (!lpSrcStr) return 0;
     int len = cchSrc >= 0 ? cchSrc : 0;
@@ -2985,6 +3131,7 @@ WINAPI uint32_t ws2_32_ntohs(uint32_t netshort) { return ntohs(static_cast<uint1
 WINAPI int ws2_32_recv(uintptr_t s, char *buf, int len, int flags) { return recv(static_cast<int>(s), buf, len, flags); }
 WINAPI int ws2_32_select(int nfds, void *readfds, void *writefds, void *exceptfds, void *timeout) { return select(nfds, static_cast<fd_set *>(readfds), static_cast<fd_set *>(writefds), static_cast<fd_set *>(exceptfds), static_cast<timeval *>(timeout)); }
 WINAPI int ws2_32_send(uintptr_t s, const char *buf, int len, int flags) { return send(static_cast<int>(s), buf, len, flags); }
+WINAPI int ws2_32_WSASend(uintptr_t s, void *buffers, DWORD buffer_count, DWORD *bytes_sent, DWORD flags, void *overlapped, void *completion) { return -1; }
 WINAPI int ws2_32_setsockopt(uintptr_t s, int level, int optname, const char *optval, int optlen) { return setsockopt(static_cast<int>(s), level, optname, optval, static_cast<socklen_t>(optlen)); }
 WINAPI int ws2_32_gethostname(char *name, int namelen) { return gethostname(name, namelen); }
 WINAPI int ws2_32___WSAFDIsSet(uintptr_t fd, void *set) { return FD_ISSET(static_cast<int>(fd), static_cast<fd_set *>(set)); }
@@ -3115,10 +3262,20 @@ void register_windows_library_functions() {
     CRT_FUNC(math, sqrtf);
     CRT_FUNC(math, log2f);
     CRT_FUNC(math, _fdtest);
+    CRT_FUNC(math, _fdclass);
+    CRT_FUNC(stdio, __acrt_iob_func);
+    CRT_FUNC(stdio, fflush);
+    CRT_FUNC(stdio, __stdio_common_vfwprintf);
     CRT_FUNC(math, acosf);
     CRT_FUNC(runtime, _invalid_parameter_noinfo_noreturn);
 
     register_function("MSVCP140.dll", "_Xtime_get_ticks", generic_func(&msvcp__Xtime_get_ticks));
+    register_function("MSVCP140.dll", "_Mtx_init_in_situ", generic_func(&msvcp__Mtx_init_in_situ));
+    register_function("MSVCP140.dll", "_Mtx_destroy_in_situ", generic_func(&msvcp__Mtx_destroy_in_situ));
+    register_function("MSVCP140.dll", "_Mtx_lock", generic_func(&msvcp__Mtx_lock));
+    register_function("MSVCP140.dll", "_Mtx_trylock", generic_func(&msvcp__Mtx_trylock));
+    register_function("MSVCP140.dll", "_Mtx_unlock", generic_func(&msvcp__Mtx_unlock));
+    register_function("MSVCP140.dll", "?_Throw_C_error@std@@YAXH@Z", generic_func(&msvcp__Throw_C_error));
 
     register_function("MSVCP120.dll", "?_Xbad_function_call@std@@YAXXZ", generic_func(&msvcp__Xbad_function_call));
     register_function("MSVCP120.dll", "?_Winerror_map@std@@YAPEBDH@Z", generic_func(&msvcp__Winerror_map));
@@ -3339,6 +3496,21 @@ void register_windows_library_functions() {
     KERNEL32_FUNC(GetFullPathNameA);
     KERNEL32_FUNC(GetFullPathNameW);
     KERNEL32_FUNC(Sleep);
+    KERNEL32_FUNC(SleepEx);
+    KERNEL32_FUNC(ResumeThread);
+    KERNEL32_FUNC(SetThreadPriority);
+    KERNEL32_FUNC(SetThreadAffinityMask);
+    KERNEL32_FUNC(QueueUserAPC);
+    KERNEL32_FUNC(GetErrorMode);
+    KERNEL32_FUNC(SetErrorMode);
+    KERNEL32_FUNC(LoadLibraryW);
+    KERNEL32_FUNC(CancelIo);
+    KERNEL32_FUNC(ReadDirectoryChangesW);
+    KERNEL32_FUNC(FindFirstFileExW);
+    KERNEL32_FUNC(GetComputerNameW);
+    KERNEL32_FUNC(CopyFileW);
+    KERNEL32_FUNC(MoveFileExW);
+    KERNEL32_FUNC(RemoveDirectoryW);
     KERNEL32_FUNC(LCMapStringW);
     KERNEL32_FUNC(SetFileAttributesW);
     KERNEL32_FUNC(CopyFileExW);
@@ -3383,6 +3555,7 @@ void register_windows_library_functions() {
     register_function("WS2_32.dll", "recv", generic_func(&ws2_32_recv));
     register_function("WS2_32.dll", "select", generic_func(&ws2_32_select));
     register_function("WS2_32.dll", "send", generic_func(&ws2_32_send));
+    register_function("WS2_32.dll", "WSASend", generic_func(&ws2_32_WSASend));
     register_function("WS2_32.dll", "setsockopt", generic_func(&ws2_32_setsockopt));
     register_function("WS2_32.dll", "gethostname", generic_func(&ws2_32_gethostname));
     register_function("WS2_32.dll", "__WSAFDIsSet", generic_func(&ws2_32___WSAFDIsSet));

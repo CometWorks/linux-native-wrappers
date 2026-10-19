@@ -13,7 +13,7 @@ OUTPUT = ROOT / "src/Voxels.cpp"
 PRIMITIVES = {
     "void": "void", "bool": "bool4", "byte": "u1", "int": "i4",
     "float": "r4", "nint": "ptr", "IntPtr": "ptr", "nuint": "u8",
-    "UIntPtr": "u8",
+    "UIntPtr": "u8", "long": "i8",
 }
 STRUCTS = {
     "Vector2": 8, "Vector3": 12, "Vector3I": 12,

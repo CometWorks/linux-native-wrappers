@@ -169,6 +169,8 @@ using hknpShape_cctor_function_0_3_t = void *(WINAPI *)(void *, void *);
 hknpShape_cctor_function_0_3_t phknpShape_cctor_function_0_3;
 using HkConstraintHandler_cctor_function_0_2_t = void *(WINAPI *)(void *, void *);
 HkConstraintHandler_cctor_function_0_2_t pHkConstraintHandler_cctor_function_0_2;
+using HkBodyDrivingSettings_cctor_t = void *(WINAPI *)(void *, void *);
+HkBodyDrivingSettings_cctor_t pHkBodyDrivingSettings_cctor;
 using HkBodyInfoCollection_cctor_t = void *(WINAPI *)(void *, void *);
 HkBodyInfoCollection_cctor_t pHkBodyInfoCollection_cctor;
 using HkBodyInfoUpdate_cctor_t = void *(WINAPI *)(void *, void *);
@@ -217,6 +219,10 @@ using HkColliderQueryDispatcher_cctor_function_0_3_t = void *(WINAPI *)(void *, 
 HkColliderQueryDispatcher_cctor_function_0_3_t pHkColliderQueryDispatcher_cctor_function_0_3;
 using HkColliderQueryDispatcher_cctor_function_0_4_t = void *(WINAPI *)(void *, void *);
 HkColliderQueryDispatcher_cctor_function_0_4_t pHkColliderQueryDispatcher_cctor_function_0_4;
+using HkColliderQueryDispatcher_cctor_function_0_5_t = void *(WINAPI *)(void *, void *);
+HkColliderQueryDispatcher_cctor_function_0_5_t pHkColliderQueryDispatcher_cctor_function_0_5;
+using HkColliderQueryDispatcher_cctor_function_0_6_t = void *(WINAPI *)(void *, void *);
+HkColliderQueryDispatcher_cctor_function_0_6_t pHkColliderQueryDispatcher_cctor_function_0_6;
 using HkCollisionQueryCollector_cctor_t = void *(WINAPI *)(void *, void *);
 HkCollisionQueryCollector_cctor_t pHkCollisionQueryCollector_cctor;
 using HkConstraintHandler_ctor_t = void *(WINAPI *)(void *, void *, void *);
@@ -235,7 +241,7 @@ using HkFracture_cctor_t = void *(WINAPI *)(void *, void *);
 HkFracture_cctor_t pHkFracture_cctor;
 using HkGeometryRef_cctor_t = void *(WINAPI *)(void *, void *);
 HkGeometryRef_cctor_t pHkGeometryRef_cctor;
-using HkGravityModifier_ctor_t = void *(WINAPI *)(void *, void *, float);
+using HkGravityModifier_ctor_t = void *(WINAPI *)(void *, void *, float, float);
 HkGravityModifier_ctor_t pHkGravityModifier_ctor;
 using HkGravityUpdate_cctor_t = void *(WINAPI *)(void *, void *);
 HkGravityUpdate_cctor_t pHkGravityUpdate_cctor;
@@ -267,6 +273,8 @@ using HkMaterialLibrary_cctor_t = void *(WINAPI *)(void *, void *);
 HkMaterialLibrary_cctor_t pHkMaterialLibrary_cctor;
 using HkMaterialLibrary_ctor_t = void *(WINAPI *)(void *);
 HkMaterialLibrary_ctor_t pHkMaterialLibrary_ctor;
+using HkModelSkeletonBone_cctor_t = void *(WINAPI *)(void *, void *);
+HkModelSkeletonBone_cctor_t pHkModelSkeletonBone_cctor;
 using HkModifierUtils_cctor_t = void *(WINAPI *)(void *, void *);
 HkModifierUtils_cctor_t pHkModifierUtils_cctor;
 using HkQueryDispatcher_cctor_function_0_3_t = void *(WINAPI *)(void *, void *);
@@ -275,8 +283,12 @@ using HkQueryDispatcher_cctor_function_0_4_t = void *(WINAPI *)(void *, void *);
 HkQueryDispatcher_cctor_function_0_4_t pHkQueryDispatcher_cctor_function_0_4;
 using HkPackedBodyInfo_cctor_t = void *(WINAPI *)(void *, void *);
 HkPackedBodyInfo_cctor_t pHkPackedBodyInfo_cctor;
+using HkPackedBodyInfoExtended_cctor_t = void *(WINAPI *)(void *, void *);
+HkPackedBodyInfoExtended_cctor_t pHkPackedBodyInfoExtended_cctor;
 using HkPackedBodyProxy_cctor_t = void *(WINAPI *)(void *, void *);
 HkPackedBodyProxy_cctor_t pHkPackedBodyProxy_cctor;
+using HkPackedRelativeTransform_cctor_t = void *(WINAPI *)(void *, void *);
+HkPackedRelativeTransform_cctor_t pHkPackedRelativeTransform_cctor;
 using HkPackedRigidBodyData_cctor_t = void *(WINAPI *)(void *, void *);
 HkPackedRigidBodyData_cctor_t pHkPackedRigidBodyData_cctor;
 using HkPackedWorldTransform_cctor_1_t = void *(WINAPI *)(void *, void *);
@@ -445,6 +457,10 @@ using vrShapeKey_cctor_t = void *(WINAPI *)(void *, void *);
 vrShapeKey_cctor_t pvrShapeKey_cctor;
 using vrTriggerEventInfo_cctor_t = void *(WINAPI *)(void *, void *);
 vrTriggerEventInfo_cctor_t pvrTriggerEventInfo_cctor;
+using vrWorldBufferSettings_cctor_t = void *(WINAPI *)(void *, void *);
+vrWorldBufferSettings_cctor_t pvrWorldBufferSettings_cctor;
+using vrWorldSnapshotExporter_cctor_t = void *(WINAPI *)(void *, void *);
+vrWorldSnapshotExporter_cctor_t pvrWorldSnapshotExporter_cctor;
 using HkConstraintHandler_dtor_t = void(WINAPI *)(void *);
 HkConstraintHandler_dtor_t pHkConstraintHandler_dtor;
 using HkDebugProcessManager_dtor_t = void(WINAPI *)(void *);
@@ -501,6 +517,8 @@ using AddInstances_t = void(WINAPI *)(void *, void *, void *);
 AddInstances_t pAddInstances;
 using AddMassChangerModifier_t = void *(WINAPI *)(void *);
 AddMassChangerModifier_t pAddMassChangerModifier;
+using AddOrRemoveReference_t = void(WINAPI *)(int32_t, void *);
+AddOrRemoveReference_t pAddOrRemoveReference;
 using AddToWorld_t = void(WINAPI *)(void *, int32_t, int32_t);
 AddToWorld_t pAddToWorld;
 using HkGridShapeStorage_Allocate_t = int32_t(WINAPI *)(void *, void *, int32_t, void *);
@@ -545,6 +563,8 @@ using AllocateMassDistributionRef_t = void *(WINAPI *)(void *);
 AllocateMassDistributionRef_t pAllocateMassDistributionRef;
 using AllocateMesh_t = void *(WINAPI *)(void *, void *, void *);
 AllocateMesh_t pAllocateMesh;
+using AllocateMotion_t = void(WINAPI *)(void *, void *, void *, int32_t, void *);
+AllocateMotion_t pAllocateMotion;
 using AllocateMutableCompound_t = void *(WINAPI *)(int32_t);
 AllocateMutableCompound_t pAllocateMutableCompound;
 using AllocateNullCollider_t = void *(WINAPI *)(float);
@@ -581,14 +601,16 @@ using AllocateWheelConstraintData_t = void *(WINAPI *)(void *);
 AllocateWheelConstraintData_t pAllocateWheelConstraintData;
 using AllocateWorld_t = void *(WINAPI *)(void *, int32_t, void *, void *, int32_t);
 AllocateWorld_t pAllocateWorld;
+using ApplyRagdollBodyImpulse_t = void(WINAPI *)(void *, int32_t, void *, void *);
+ApplyRagdollBodyImpulse_t pApplyRagdollBodyImpulse;
 using AreBodiesConnected_t = uint8_t(WINAPI *)(void *, void *, uint64_t, uint64_t);
 AreBodiesConnected_t pAreBodiesConnected;
 using AssignFrom_t = void(WINAPI *)(void *, void *);
 AssignFrom_t pAssignFrom;
 using AssignTo_t = void(WINAPI *)(void *, void *);
 AssignTo_t pAssignTo;
-using AttachBodies_t = void(WINAPI *)(void *, void *, int32_t, uint64_t);
-AttachBodies_t pAttachBodies;
+using AttachBodiesToMotion_t = void(WINAPI *)(void *, void *, void *, int32_t, void *, uint32_t);
+AttachBodiesToMotion_t pAttachBodiesToMotion;
 using BeginRecording_t = void(WINAPI *)(void *, const char *);
 BeginRecording_t pBeginRecording;
 using BuildColliderMassProperties_t = void(WINAPI *)(void *, void *, void *);
@@ -649,8 +671,6 @@ using DecomposeIntoConvexShapes_t = void(WINAPI *)(void *, void *, void *, void 
 DecomposeIntoConvexShapes_t pDecomposeIntoConvexShapes;
 using DestroyBodyConstraints_t = void(WINAPI *)(void *, void *, uint64_t);
 DestroyBodyConstraints_t pDestroyBodyConstraints;
-using DetachBodies_t = void(WINAPI *)(void *, void *, int32_t, void *);
-DetachBodies_t pDetachBodies;
 using DiscardAsyncUpdate_t = void(WINAPI *)(void *);
 DiscardAsyncUpdate_t pDiscardAsyncUpdate;
 using HkLoadedShapeInfo_Dispose_t = void(WINAPI *)(void *);
@@ -673,6 +693,10 @@ using DrawText_t = void(WINAPI *)(void *, void *, uint32_t);
 DrawText_t pDrawText;
 using DrawTransformedAABB_t = void(WINAPI *)(void *, void *, uint32_t, uint32_t);
 DrawTransformedAABB_t pDrawTransformedAABB;
+using Drive_t = void(WINAPI *)(void *, int32_t, void *, float);
+Drive_t pDrive;
+using DriveBodyTo_t = void(WINAPI *)(void *, uint64_t, void *, void *);
+DriveBodyTo_t pDriveBodyTo;
 using EnableVisualDebugger_t = void(WINAPI *)(void *);
 EnableVisualDebugger_t pEnableVisualDebugger;
 using End_t = void(WINAPI *)(void *);
@@ -681,6 +705,8 @@ using EndRecording_t = void(WINAPI *)(void *);
 EndRecording_t pEndRecording;
 using Error_t = void(WINAPI *)(void *, uint32_t, const char *);
 Error_t pError;
+using ExportWorldSnapshot_t = uint8_t(WINAPI *)(void *, const char *, int32_t);
+ExportWorldSnapshot_t pExportWorldSnapshot;
 using FilterManifolds_t = void(WINAPI *)(void *);
 FilterManifolds_t pFilterManifolds;
 using FindByName_t = void(WINAPI *)(void *, void *, const char *);
@@ -699,6 +725,8 @@ using GenerateGroups_t = void(WINAPI *)(void *, void *);
 GenerateGroups_t pGenerateGroups;
 using HkMaterialLibrary_Get_t = void(WINAPI *)(void *, void *, uint16_t);
 HkMaterialLibrary_Get_t pHkMaterialLibrary_Get;
+using GetActiveBodiesCount_t = int32_t(WINAPI *)(void *);
+GetActiveBodiesCount_t pGetActiveBodiesCount;
 using GetAndAdvance_t = uint8_t(WINAPI *)(void *);
 GetAndAdvance_t pGetAndAdvance;
 using GetAngle_t = float(WINAPI *)(void *);
@@ -719,8 +747,10 @@ using GetBodyMotion_t = void(WINAPI *)(void *, void *, uint64_t, void *);
 GetBodyMotion_t pGetBodyMotion;
 using GetBodyMotionId_t = void(WINAPI *)(void *, void *, uint64_t);
 GetBodyMotionId_t pGetBodyMotionId;
-using GetBodyTransform_t = void(WINAPI *)(void *, uint64_t, void *);
-GetBodyTransform_t pGetBodyTransform;
+using HkRagdoll_GetBodyTransform_t = void(WINAPI *)(void *, void *, int32_t);
+HkRagdoll_GetBodyTransform_t pHkRagdoll_GetBodyTransform;
+using HkWorld_GetBodyTransform_t = void(WINAPI *)(void *, uint64_t, void *);
+HkWorld_GetBodyTransform_t pHkWorld_GetBodyTransform;
 using GetChild_t = uint8_t(WINAPI *)(void *, uint32_t, void *);
 GetChild_t pGetChild;
 using HkSimdTreeGridShape_GetChildShape_t = void *(WINAPI *)(void *, uint32_t);
@@ -755,6 +785,10 @@ using GetHighSkeletonBones_t = void(WINAPI *)(void *, void *);
 GetHighSkeletonBones_t pGetHighSkeletonBones;
 using GetInteractionType_t = uint8_t(WINAPI *)(void *, void *, void *, void *);
 GetInteractionType_t pGetInteractionType;
+using HkSimdTreeGridShape_GetLeafTransform_t = void(WINAPI *)(void *, void *, uint32_t);
+HkSimdTreeGridShape_GetLeafTransform_t pHkSimdTreeGridShape_GetLeafTransform;
+using HkSparseGridShape_GetLeafTransform_t = void(WINAPI *)(void *, void *, uint32_t);
+HkSparseGridShape_GetLeafTransform_t pHkSparseGridShape_GetLeafTransform;
 using GetLibrary_t = void *(WINAPI *)(void);
 GetLibrary_t pGetLibrary;
 using GetLowBoneToRagdollRigidBody_t = void(WINAPI *)(void *, void *);
@@ -767,6 +801,8 @@ using Global_GetMaterial_t = void(WINAPI *)(void *, void *, uint64_t, uint32_t);
 Global_GetMaterial_t pGlobal_GetMaterial;
 using HkMaterialLibrary_GetMaterial_t = void(WINAPI *)(void *, void *, uint16_t);
 HkMaterialLibrary_GetMaterial_t pHkMaterialLibrary_GetMaterial;
+using GetMotionSharedBodiesInfo_t = void(WINAPI *)(void *, int32_t);
+GetMotionSharedBodiesInfo_t pGetMotionSharedBodiesInfo;
 using ConvexShapeArgs_GetMutable_void_t = int32_t(WINAPI *)(void *);
 ConvexShapeArgs_GetMutable_void_t pConvexShapeArgs_GetMutable_void;
 using ConvexShapeArgs_GetMutable_isMutable_t = int32_t(WINAPI *)(int32_t);
@@ -777,7 +813,7 @@ using GetProcesses_t = void(WINAPI *)(void *, void *, void *);
 GetProcesses_t pGetProcesses;
 using GetQuadCount_t = int32_t(WINAPI *)(void *);
 GetQuadCount_t pGetQuadCount;
-using GetRagdollPose_t = void(WINAPI *)(void *, void *, void *);
+using GetRagdollPose_t = void(WINAPI *)(void *, void *, void *, int32_t, void *);
 GetRagdollPose_t pGetRagdollPose;
 using GetRagdollRigidBodiesCount_t = int32_t(WINAPI *)(void *);
 GetRagdollRigidBodiesCount_t pGetRagdollRigidBodiesCount;
@@ -891,6 +927,10 @@ using HkColliderQueryDispatcher_QueryAabb_t = void(WINAPI *)(void *, void *);
 HkColliderQueryDispatcher_QueryAabb_t pHkColliderQueryDispatcher_QueryAabb;
 using HkQueryDispatcher_QueryAabb_t = void(WINAPI *)(void *, void *);
 HkQueryDispatcher_QueryAabb_t pHkQueryDispatcher_QueryAabb;
+using QueryGeometry_t = void(WINAPI *)(void *, void *, void *);
+QueryGeometry_t pQueryGeometry;
+using QueryLeaves_t = void(WINAPI *)(void *, void *, void *);
+QueryLeaves_t pQueryLeaves;
 using HkSimdTreeGridShape_RegisterFunctions_t = void(WINAPI *)(void);
 HkSimdTreeGridShape_RegisterFunctions_t pHkSimdTreeGridShape_RegisterFunctions;
 using HkSparseGridShape_RegisterFunctions_t = void(WINAPI *)(void);
@@ -915,6 +955,8 @@ using HkSparseGridShape_RemoveShapes_t = void(WINAPI *)(void *, void *, int32_t)
 HkSparseGridShape_RemoveShapes_t pHkSparseGridShape_RemoveShapes;
 using HkMaterialLibrary_Reset_t = void(WINAPI *)(void *);
 HkMaterialLibrary_Reset_t pHkMaterialLibrary_Reset;
+using RestoreBodiesMotionType_t = void(WINAPI *)(void *, void *, void *, void *, int32_t, void *, int32_t);
+RestoreBodiesMotionType_t pRestoreBodiesMotionType;
 using SetAngle_t = void(WINAPI *)(void *, float);
 SetAngle_t pSetAngle;
 using SetAngularMotorSettings_t = void(WINAPI *)(void *, void *);
@@ -925,6 +967,8 @@ using SetBodiesEntityLayerIndex_t = void(WINAPI *)(void *, void *, int32_t, uint
 SetBodiesEntityLayerIndex_t pSetBodiesEntityLayerIndex;
 using SetBodiesInfo_t = void(WINAPI *)(void *, int32_t, void *);
 SetBodiesInfo_t pSetBodiesInfo;
+using SetBodiesMotion_t = void(WINAPI *)(void *, void *, int32_t, uint32_t);
+SetBodiesMotion_t pSetBodiesMotion;
 using SetBodiesMotionType_t = void(WINAPI *)(void *, void *, void *, void *, int32_t, void *, int32_t);
 SetBodiesMotionType_t pSetBodiesMotionType;
 using SetBodyBreakingLayer_t = void(WINAPI *)(void *, uint64_t, uint8_t);
@@ -951,6 +995,8 @@ using SetColliderDeletionCallback_t = void(WINAPI *)(void *);
 SetColliderDeletionCallback_t pSetColliderDeletionCallback;
 using SetColliderMassProperties_t = void(WINAPI *)(void *, void *);
 SetColliderMassProperties_t pSetColliderMassProperties;
+using SetCollisionEventsEnabled_t = void(WINAPI *)(void *, int32_t);
+SetCollisionEventsEnabled_t pSetCollisionEventsEnabled;
 using SetConstraintGroupCinfo_t = void(WINAPI *)(void *, void *);
 SetConstraintGroupCinfo_t pSetConstraintGroupCinfo;
 using HkDebugProcessManager_SetDebuggedWorld_t = void(WINAPI *)(void *, void *);
@@ -995,6 +1041,8 @@ using SetMotorEnabled_2_t = void(WINAPI *)(void *, int32_t);
 SetMotorEnabled_2_t pSetMotorEnabled_2;
 using SetNotifyDeletion_t = void(WINAPI *)(void *, int32_t);
 SetNotifyDeletion_t pSetNotifyDeletion;
+using SetPostProjectionEnabled_t = void(WINAPI *)(void *, int32_t);
+SetPostProjectionEnabled_t pSetPostProjectionEnabled;
 using SetProcessEnabled_t = void(WINAPI *)(void *, int32_t, int32_t);
 SetProcessEnabled_t pSetProcessEnabled;
 using SetShapesViewerOptions_t = void(WINAPI *)(void *, int32_t, void *);
@@ -1005,12 +1053,16 @@ using SetSolverParameters_t = void(WINAPI *)(void *, int32_t, int32_t, float, fl
 SetSolverParameters_t pSetSolverParameters;
 using SetStaticBodiesInfo_t = void(WINAPI *)(void *, int32_t);
 SetStaticBodiesInfo_t pSetStaticBodiesInfo;
+using SetTargetPose_t = void(WINAPI *)(void *, void *, int32_t);
+SetTargetPose_t pSetTargetPose;
 using SetUnbreached_t = void(WINAPI *)(void *);
 SetUnbreached_t pSetUnbreached;
 using SimplifyGeometry_t = void(WINAPI *)(void *, uint8_t);
 SimplifyGeometry_t pSimplifyGeometry;
 using StepCollide_t = void(WINAPI *)(void *, float);
 StepCollide_t pStepCollide;
+using StepDebugDraw_t = void(WINAPI *)(void *, float);
+StepDebugDraw_t pStepDebugDraw;
 using StepSolve_t = void(WINAPI *)(void *, float);
 StepSolve_t pStepSolve;
 using StepVDB_t = void(WINAPI *)(void *, float);
@@ -1057,8 +1109,6 @@ using HkManifoldInfo_Update_t = void(WINAPI *)(void *, void *, void *, void *, v
 HkManifoldInfo_Update_t pHkManifoldInfo_Update;
 using HkMaterialLibrary_Update_t = void(WINAPI *)(void *, uint16_t, void *);
 HkMaterialLibrary_Update_t pHkMaterialLibrary_Update;
-using HkRagdoll_Update_t = void(WINAPI *)(void *, void *, int32_t, void *, float);
-HkRagdoll_Update_t pHkRagdoll_Update;
 using UpdateAndDraw_t = void(WINAPI *)(void *, float);
 UpdateAndDraw_t pUpdateAndDraw;
 using UpdateBodyCOMCenteredBoundingRadius_t = void(WINAPI *)(void *, uint64_t);
@@ -1073,6 +1123,8 @@ using UpdateMotionTransforms_t = void(WINAPI *)(void *, void *);
 UpdateMotionTransforms_t pUpdateMotionTransforms;
 using UpdateMotorsParameters_t = void(WINAPI *)(void *, void *);
 UpdateMotorsParameters_t pUpdateMotorsParameters;
+using UpdatePostProjectionSettings_t = void(WINAPI *)(void *, void *);
+UpdatePostProjectionSettings_t pUpdatePostProjectionSettings;
 using HkVoxelShape_UpdateRange_updateData_t = void(WINAPI *)(void *, void *);
 HkVoxelShape_UpdateRange_updateData_t pHkVoxelShape_UpdateRange_updateData;
 using HkVoxelShape_UpdateRange_min_max_content_materials_t = void(WINAPI *)(void *, void *, void *, void *, void *);
@@ -2455,12 +2507,12 @@ using Global_dtor_void_5_t = void(WINAPI *)(void *);
 Global_dtor_void_5_t pGlobal_dtor_void_5;
 using Global_ctor_void_18_t = void *(WINAPI *)(void *);
 Global_ctor_void_18_t pGlobal_ctor_void_18;
+using Global_ctor_void_19_t = void *(WINAPI *)(void *);
+Global_ctor_void_19_t pGlobal_ctor_void_19;
 using Global_cctor_function_0_22_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_22_t pGlobal_cctor_function_0_22;
 using Global_ctor_preciseTransform_t = void *(WINAPI *)(void *, void *);
 Global_ctor_preciseTransform_t pGlobal_ctor_preciseTransform;
-using Global_ctor_void_19_t = void *(WINAPI *)(void *);
-Global_ctor_void_19_t pGlobal_ctor_void_19;
 using Global_ctor_void_20_t = void *(WINAPI *)(void *);
 Global_ctor_void_20_t pGlobal_ctor_void_20;
 using Global_ctor_void_21_t = void *(WINAPI *)(void *);
@@ -2469,56 +2521,56 @@ using Global_ctor_void_22_t = void *(WINAPI *)(void *);
 Global_ctor_void_22_t pGlobal_ctor_void_22;
 using Global_ctor_void_23_t = void *(WINAPI *)(void *);
 Global_ctor_void_23_t pGlobal_ctor_void_23;
+using Global_ctor_void_24_t = void *(WINAPI *)(void *);
+Global_ctor_void_24_t pGlobal_ctor_void_24;
 using Global_cctor_function_0_23_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_23_t pGlobal_cctor_function_0_23;
 using Global_cctor_function_0_24_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_24_t pGlobal_cctor_function_0_24;
-using Global_ctor_void_24_t = void *(WINAPI *)(void *);
-Global_ctor_void_24_t pGlobal_ctor_void_24;
 using Global_ctor_void_25_t = void *(WINAPI *)(void *);
 Global_ctor_void_25_t pGlobal_ctor_void_25;
-using Global_cctor_function_0_25_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_25_t pGlobal_cctor_function_0_25;
 using Global_ctor_void_26_t = void *(WINAPI *)(void *);
 Global_ctor_void_26_t pGlobal_ctor_void_26;
+using Global_cctor_function_0_25_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_25_t pGlobal_cctor_function_0_25;
 using Global_ctor_void_27_t = void *(WINAPI *)(void *);
 Global_ctor_void_27_t pGlobal_ctor_void_27;
 using Global_ctor_void_28_t = void *(WINAPI *)(void *);
 Global_ctor_void_28_t pGlobal_ctor_void_28;
 using Global_ctor_void_29_t = void *(WINAPI *)(void *);
 Global_ctor_void_29_t pGlobal_ctor_void_29;
-using Global_cctor_function_0_26_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_26_t pGlobal_cctor_function_0_26;
 using Global_ctor_void_30_t = void *(WINAPI *)(void *);
 Global_ctor_void_30_t pGlobal_ctor_void_30;
+using Global_cctor_function_0_26_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_26_t pGlobal_cctor_function_0_26;
+using Global_ctor_void_31_t = void *(WINAPI *)(void *);
+Global_ctor_void_31_t pGlobal_ctor_void_31;
 using Global_cctor_function_0_27_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_27_t pGlobal_cctor_function_0_27;
 using Global_dtor_void_6_t = void(WINAPI *)(void *);
 Global_dtor_void_6_t pGlobal_dtor_void_6;
 using Global_cctor_function_0_28_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_28_t pGlobal_cctor_function_0_28;
-using Global_ctor_void_31_t = void *(WINAPI *)(void *);
-Global_ctor_void_31_t pGlobal_ctor_void_31;
-using Global_cctor_function_0_29_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_29_t pGlobal_cctor_function_0_29;
 using Global_ctor_void_32_t = void *(WINAPI *)(void *);
 Global_ctor_void_32_t pGlobal_ctor_void_32;
-using Global_ctor_other_t = void *(WINAPI *)(void *, void *);
-Global_ctor_other_t pGlobal_ctor_other;
+using Global_cctor_function_0_29_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_29_t pGlobal_cctor_function_0_29;
 using Global_ctor_void_33_t = void *(WINAPI *)(void *);
 Global_ctor_void_33_t pGlobal_ctor_void_33;
-using Global_cctor_function_0_30_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_30_t pGlobal_cctor_function_0_30;
+using Global_ctor_other_t = void *(WINAPI *)(void *, void *);
+Global_ctor_other_t pGlobal_ctor_other;
 using Global_ctor_void_34_t = void *(WINAPI *)(void *);
 Global_ctor_void_34_t pGlobal_ctor_void_34;
+using Global_cctor_function_0_30_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_30_t pGlobal_cctor_function_0_30;
 using Global_ctor_void_35_t = void *(WINAPI *)(void *);
 Global_ctor_void_35_t pGlobal_ctor_void_35;
 using Global_ctor_void_36_t = void *(WINAPI *)(void *);
 Global_ctor_void_36_t pGlobal_ctor_void_36;
-using Global_cctor_function_0_31_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_31_t pGlobal_cctor_function_0_31;
 using Global_ctor_void_37_t = void *(WINAPI *)(void *);
 Global_ctor_void_37_t pGlobal_ctor_void_37;
+using Global_cctor_function_0_31_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_31_t pGlobal_cctor_function_0_31;
 using Global_ctor_void_38_t = void *(WINAPI *)(void *);
 Global_ctor_void_38_t pGlobal_ctor_void_38;
 using Global_ctor_void_39_t = void *(WINAPI *)(void *);
@@ -2531,110 +2583,112 @@ using Global_ctor_void_42_t = void *(WINAPI *)(void *);
 Global_ctor_void_42_t pGlobal_ctor_void_42;
 using Global_ctor_void_43_t = void *(WINAPI *)(void *);
 Global_ctor_void_43_t pGlobal_ctor_void_43;
-using Global_cctor_function_0_32_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_32_t pGlobal_cctor_function_0_32;
 using Global_ctor_void_44_t = void *(WINAPI *)(void *);
 Global_ctor_void_44_t pGlobal_ctor_void_44;
-using Global_cctor_function_0_33_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_33_t pGlobal_cctor_function_0_33;
+using Global_cctor_function_0_32_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_32_t pGlobal_cctor_function_0_32;
 using Global_ctor_void_45_t = void *(WINAPI *)(void *);
 Global_ctor_void_45_t pGlobal_ctor_void_45;
+using Global_cctor_function_0_33_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_33_t pGlobal_cctor_function_0_33;
+using Global_ctor_void_46_t = void *(WINAPI *)(void *);
+Global_ctor_void_46_t pGlobal_ctor_void_46;
 using Global_cctor_function_0_34_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_34_t pGlobal_cctor_function_0_34;
 using Global_dtor_void_7_t = void(WINAPI *)(void *);
 Global_dtor_void_7_t pGlobal_dtor_void_7;
 using Global_cctor_function_0_35_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_35_t pGlobal_cctor_function_0_35;
-using Global_ctor_void_46_t = void *(WINAPI *)(void *);
-Global_ctor_void_46_t pGlobal_ctor_void_46;
 using Global_ctor_void_47_t = void *(WINAPI *)(void *);
 Global_ctor_void_47_t pGlobal_ctor_void_47;
 using Global_ctor_void_48_t = void *(WINAPI *)(void *);
 Global_ctor_void_48_t pGlobal_ctor_void_48;
 using Global_ctor_void_49_t = void *(WINAPI *)(void *);
 Global_ctor_void_49_t pGlobal_ctor_void_49;
+using Global_ctor_void_50_t = void *(WINAPI *)(void *);
+Global_ctor_void_50_t pGlobal_ctor_void_50;
 using Global_ctor_i_t = void *(WINAPI *)(void *, int32_t);
 Global_ctor_i_t pGlobal_ctor_i;
 using ctor_1_t = void *(WINAPI *)(void *, int32_t);
 ctor_1_t pctor_1;
 using Global_dtor_void_8_t = void(WINAPI *)(void *);
 Global_dtor_void_8_t pGlobal_dtor_void_8;
-using Global_ctor_void_50_t = void *(WINAPI *)(void *);
-Global_ctor_void_50_t pGlobal_ctor_void_50;
 using Global_ctor_void_51_t = void *(WINAPI *)(void *);
 Global_ctor_void_51_t pGlobal_ctor_void_51;
 using Global_ctor_void_52_t = void *(WINAPI *)(void *);
 Global_ctor_void_52_t pGlobal_ctor_void_52;
 using Global_ctor_void_53_t = void *(WINAPI *)(void *);
 Global_ctor_void_53_t pGlobal_ctor_void_53;
-using Global_dtor_void_9_t = void(WINAPI *)(void *);
-Global_dtor_void_9_t pGlobal_dtor_void_9;
 using Global_ctor_void_54_t = void *(WINAPI *)(void *);
 Global_ctor_void_54_t pGlobal_ctor_void_54;
+using Global_dtor_void_9_t = void(WINAPI *)(void *);
+Global_dtor_void_9_t pGlobal_dtor_void_9;
+using Global_ctor_void_55_t = void *(WINAPI *)(void *);
+Global_ctor_void_55_t pGlobal_ctor_void_55;
 using Global_ctor_buffer_t = void *(WINAPI *)(void *, void *);
 Global_ctor_buffer_t pGlobal_ctor_buffer;
 using Global_cctor_1_function_0_5_t = void *(WINAPI *)(void *, void *);
 Global_cctor_1_function_0_5_t pGlobal_cctor_1_function_0_5;
-using Global_ctor_void_55_t = void *(WINAPI *)(void *);
-Global_ctor_void_55_t pGlobal_ctor_void_55;
+using Global_ctor_void_56_t = void *(WINAPI *)(void *);
+Global_ctor_void_56_t pGlobal_ctor_void_56;
 using Global_cctor_function_0_36_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_36_t pGlobal_cctor_function_0_36;
 using Global_dtor_void_10_t = void(WINAPI *)(void *);
 Global_dtor_void_10_t pGlobal_dtor_void_10;
 using Global_dtor_void_11_t = void(WINAPI *)(void *);
 Global_dtor_void_11_t pGlobal_dtor_void_11;
-using Global_ctor_void_56_t = void *(WINAPI *)(void *);
-Global_ctor_void_56_t pGlobal_ctor_void_56;
+using Global_ctor_void_57_t = void *(WINAPI *)(void *);
+Global_ctor_void_57_t pGlobal_ctor_void_57;
 using Global_cctor_function_0_37_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_37_t pGlobal_cctor_function_0_37;
 using Global_dtor_void_12_t = void(WINAPI *)(void *);
 Global_dtor_void_12_t pGlobal_dtor_void_12;
-using Global_ctor_void_57_t = void *(WINAPI *)(void *);
-Global_ctor_void_57_t pGlobal_ctor_void_57;
 using Global_ctor_void_58_t = void *(WINAPI *)(void *);
 Global_ctor_void_58_t pGlobal_ctor_void_58;
-using Global_ctor_type_mutability_t = void *(WINAPI *)(void *, int32_t, int32_t);
-Global_ctor_type_mutability_t pGlobal_ctor_type_mutability;
 using Global_ctor_void_59_t = void *(WINAPI *)(void *);
 Global_ctor_void_59_t pGlobal_ctor_void_59;
-using Global_dtor_void_13_t = void(WINAPI *)(void *);
-Global_dtor_void_13_t pGlobal_dtor_void_13;
+using Global_ctor_type_mutability_t = void *(WINAPI *)(void *, int32_t, int32_t);
+Global_ctor_type_mutability_t pGlobal_ctor_type_mutability;
 using Global_ctor_void_60_t = void *(WINAPI *)(void *);
 Global_ctor_void_60_t pGlobal_ctor_void_60;
+using Global_dtor_void_13_t = void(WINAPI *)(void *);
+Global_dtor_void_13_t pGlobal_dtor_void_13;
 using Global_ctor_void_61_t = void *(WINAPI *)(void *);
 Global_ctor_void_61_t pGlobal_ctor_void_61;
-using Global_dtor_void_14_t = void(WINAPI *)(void *);
-Global_dtor_void_14_t pGlobal_dtor_void_14;
 using Global_ctor_void_62_t = void *(WINAPI *)(void *);
 Global_ctor_void_62_t pGlobal_ctor_void_62;
-using Global_cctor_other_3_t = void *(WINAPI *)(void *, void *);
-Global_cctor_other_3_t pGlobal_cctor_other_3;
+using Global_dtor_void_14_t = void(WINAPI *)(void *);
+Global_dtor_void_14_t pGlobal_dtor_void_14;
 using Global_ctor_void_63_t = void *(WINAPI *)(void *);
 Global_ctor_void_63_t pGlobal_ctor_void_63;
-using Global_cctor_function_0_38_t = void *(WINAPI *)(void *, void *);
-Global_cctor_function_0_38_t pGlobal_cctor_function_0_38;
+using Global_cctor_other_3_t = void *(WINAPI *)(void *, void *);
+Global_cctor_other_3_t pGlobal_cctor_other_3;
 using Global_ctor_void_64_t = void *(WINAPI *)(void *);
 Global_ctor_void_64_t pGlobal_ctor_void_64;
+using Global_cctor_function_0_38_t = void *(WINAPI *)(void *, void *);
+Global_cctor_function_0_38_t pGlobal_cctor_function_0_38;
+using Global_ctor_void_65_t = void *(WINAPI *)(void *);
+Global_ctor_void_65_t pGlobal_ctor_void_65;
 using Global_ctor_shape_transform_t = void *(WINAPI *)(void *, void *, void *);
 Global_ctor_shape_transform_t pGlobal_ctor_shape_transform;
 using Global_cctor_other_4_t = void *(WINAPI *)(void *, void *);
 Global_cctor_other_4_t pGlobal_cctor_other_4;
-using Global_ctor_void_65_t = void *(WINAPI *)(void *);
-Global_ctor_void_65_t pGlobal_ctor_void_65;
 using Global_ctor_void_66_t = void *(WINAPI *)(void *);
 Global_ctor_void_66_t pGlobal_ctor_void_66;
+using Global_ctor_void_67_t = void *(WINAPI *)(void *);
+Global_ctor_void_67_t pGlobal_ctor_void_67;
 using Global_ctor_level_t = void *(WINAPI *)(void *, uint8_t);
 Global_ctor_level_t pGlobal_ctor_level;
 using Global_cctor_function_0_39_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_39_t pGlobal_cctor_function_0_39;
-using Global_ctor_void_67_t = void *(WINAPI *)(void *);
-Global_ctor_void_67_t pGlobal_ctor_void_67;
-using Global_dtor_void_15_t = void(WINAPI *)(void *);
-Global_dtor_void_15_t pGlobal_dtor_void_15;
 using Global_ctor_void_68_t = void *(WINAPI *)(void *);
 Global_ctor_void_68_t pGlobal_ctor_void_68;
+using Global_dtor_void_15_t = void(WINAPI *)(void *);
+Global_dtor_void_15_t pGlobal_dtor_void_15;
 using Global_ctor_void_69_t = void *(WINAPI *)(void *);
 Global_ctor_void_69_t pGlobal_ctor_void_69;
+using Global_ctor_void_70_t = void *(WINAPI *)(void *);
+Global_ctor_void_70_t pGlobal_ctor_void_70;
 using Global_cctor_function_0_40_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_40_t pGlobal_cctor_function_0_40;
 using Global_dtor_void_16_t = void(WINAPI *)(void *);
@@ -2651,16 +2705,16 @@ using Global_ctor_rootShape_t = void *(WINAPI *)(void *, void *);
 Global_ctor_rootShape_t pGlobal_ctor_rootShape;
 using Global_cctor_1_function_0_6_t = void *(WINAPI *)(void *, void *);
 Global_cctor_1_function_0_6_t pGlobal_cctor_1_function_0_6;
-using Global_ctor_void_70_t = void *(WINAPI *)(void *);
-Global_ctor_void_70_t pGlobal_ctor_void_70;
-using Global_ctor_value_t = void *(WINAPI *)(void *, uint64_t);
-Global_ctor_value_t pGlobal_ctor_value;
 using Global_ctor_void_71_t = void *(WINAPI *)(void *);
 Global_ctor_void_71_t pGlobal_ctor_void_71;
-using Global_dtor_void_17_t = void(WINAPI *)(void *);
-Global_dtor_void_17_t pGlobal_dtor_void_17;
+using Global_ctor_value_t = void *(WINAPI *)(void *, uint64_t);
+Global_ctor_value_t pGlobal_ctor_value;
 using Global_ctor_void_72_t = void *(WINAPI *)(void *);
 Global_ctor_void_72_t pGlobal_ctor_void_72;
+using Global_dtor_void_17_t = void(WINAPI *)(void *);
+Global_dtor_void_17_t pGlobal_dtor_void_17;
+using Global_ctor_void_73_t = void *(WINAPI *)(void *);
+Global_ctor_void_73_t pGlobal_ctor_void_73;
 using Global_cctor_function_0_44_t = void *(WINAPI *)(void *, void *);
 Global_cctor_function_0_44_t pGlobal_cctor_function_0_44;
 
@@ -2694,6 +2748,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     phknpShape_cctor_function_0_2 = reinterpret_cast<hknpShape_cctor_function_0_2_t>(get_export("??0GetShapeKeysConfig@hknpShape@@QEAA@AEBU01@@Z"));
     phknpShape_cctor_function_0_3 = reinterpret_cast<hknpShape_cctor_function_0_3_t>(get_export("??0GetSignedDistanceInput@hknpShape@@QEAA@AEBU01@@Z"));
     pHkConstraintHandler_cctor_function_0_2 = reinterpret_cast<HkConstraintHandler_cctor_function_0_2_t>(get_export("??0HingeConstraintAtomParameters@HkConstraintHandler@@QEAA@AEBU01@@Z"));
+    pHkBodyDrivingSettings_cctor = reinterpret_cast<HkBodyDrivingSettings_cctor_t>(get_export("??0HkBodyDrivingSettings@@QEAA@AEBU0@@Z"));
     pHkBodyInfoCollection_cctor = reinterpret_cast<HkBodyInfoCollection_cctor_t>(get_export("??0HkBodyInfoCollection@@QEAA@AEBU0@@Z"));
     pHkBodyInfoUpdate_cctor = reinterpret_cast<HkBodyInfoUpdate_cctor_t>(get_export("??0HkBodyInfoUpdate@@QEAA@AEBU0@@Z"));
     pHkBodyMotionInfo_cctor = reinterpret_cast<HkBodyMotionInfo_cctor_t>(get_export("??0HkBodyMotionInfo@@QEAA@AEBU0@@Z"));
@@ -2714,10 +2769,12 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pHkCharacterMovementUtil_cctor = reinterpret_cast<HkCharacterMovementUtil_cctor_t>(get_export("??0HkCharacterMovementUtil@@QEAA@AEBV0@@Z"));
     pHkCharacterStateManager_ctor = reinterpret_cast<HkCharacterStateManager_ctor_t>(get_export("??0HkCharacterStateManager@@QEAA@AEBUHkCharacterStateManagerCinfo@@@Z"));
     pHkCharacterStateManagerCinfo_cctor = reinterpret_cast<HkCharacterStateManagerCinfo_cctor_t>(get_export("??0HkCharacterStateManagerCinfo@@QEAA@AEBU0@@Z"));
-    pHkColliderQueryDispatcher_cctor_function_0 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_t>(get_export("??0HkColliderNearestQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
-    pHkColliderQueryDispatcher_cctor_function_0_2 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_2_t>(get_export("??0HkColliderQueryAABBArgs@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
-    pHkColliderQueryDispatcher_cctor_function_0_3 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_3_t>(get_export("??0HkColliderQueryDispatcher@@QEAA@AEBV0@@Z"));
-    pHkColliderQueryDispatcher_cctor_function_0_4 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_4_t>(get_export("??0HkColliderSweepQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_t>(get_export("??0HkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0_2 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_2_t>(get_export("??0HkColliderLeafQueryTriangleOrQuadHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0_3 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_3_t>(get_export("??0HkColliderNearestQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0_4 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_4_t>(get_export("??0HkColliderQueryAABBArgs@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0_5 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_5_t>(get_export("??0HkColliderQueryDispatcher@@QEAA@AEBV0@@Z"));
+    pHkColliderQueryDispatcher_cctor_function_0_6 = reinterpret_cast<HkColliderQueryDispatcher_cctor_function_0_6_t>(get_export("??0HkColliderSweepQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z"));
     pHkCollisionQueryCollector_cctor = reinterpret_cast<HkCollisionQueryCollector_cctor_t>(get_export("??0HkCollisionQueryCollector@@QEAA@AEBU0@@Z"));
     pHkConstraintHandler_ctor = reinterpret_cast<HkConstraintHandler_ctor_t>(get_export("??0HkConstraintHandler@@QEAA@PEBVhknpConstraintGroupCinfo@@PEAUHkSession@@@Z"));
     pHkConstraintHandler_cctor_function_0_3 = reinterpret_cast<HkConstraintHandler_cctor_function_0_3_t>(get_export("??0HkConstraintWithExceededForces@HkConstraintHandler@@QEAA@AEBU01@@Z"));
@@ -2727,7 +2784,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pHkDebugProcessManager_ctor = reinterpret_cast<HkDebugProcessManager_ctor_t>(get_export("??0HkDebugProcessManager@@QEAA@V?$hkArray@PEAVhkProcessContext@@U?$hkBuiltinContainerAllocator@$0A@$0A@@@@@UDebugDrawImplementationTable@@PEAX@Z"));
     pHkFracture_cctor = reinterpret_cast<HkFracture_cctor_t>(get_export("??0HkFracture@@QEAA@AEBU0@@Z"));
     pHkGeometryRef_cctor = reinterpret_cast<HkGeometryRef_cctor_t>(get_export("??0HkGeometryRef@@QEAA@AEBU0@@Z"));
-    pHkGravityModifier_ctor = reinterpret_cast<HkGravityModifier_ctor_t>(get_export("??0HkGravityModifier@@QEAA@PEAVhknpWorld@@M@Z"));
+    pHkGravityModifier_ctor = reinterpret_cast<HkGravityModifier_ctor_t>(get_export("??0HkGravityModifier@@QEAA@PEAVhknpWorld@@MM@Z"));
     pHkGravityUpdate_cctor = reinterpret_cast<HkGravityUpdate_cctor_t>(get_export("??0HkGravityUpdate@@QEAA@AEBU0@@Z"));
     pHkLargeShapeKey_cctor = reinterpret_cast<HkLargeShapeKey_cctor_t>(get_export("??0HkLargeShapeKey@@QEAA@AEBU0@@Z"));
     pHkLoadedShapeInfo_cctor = reinterpret_cast<HkLoadedShapeInfo_cctor_t>(get_export("??0HkLoadedShapeInfo@@QEAA@AEBU0@@Z"));
@@ -2743,11 +2800,14 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pHkMassChangerModifier_ctor = reinterpret_cast<HkMassChangerModifier_ctor_t>(get_export("??0HkMassChangerModifier@@QEAA@PEBV?$hkArray@W4HkLayerInteraction_InteractType@@U?$hkBuiltinContainerAllocator@$0A@$0A@@@@@@Z"));
     pHkMaterialLibrary_cctor = reinterpret_cast<HkMaterialLibrary_cctor_t>(get_export("??0HkMaterialConfiguration@HkMaterialLibrary@@QEAA@AEBU01@@Z"));
     pHkMaterialLibrary_ctor = reinterpret_cast<HkMaterialLibrary_ctor_t>(get_export("??0HkMaterialLibrary@@QEAA@XZ"));
+    pHkModelSkeletonBone_cctor = reinterpret_cast<HkModelSkeletonBone_cctor_t>(get_export("??0HkModelSkeletonBone@@QEAA@AEBU0@@Z"));
     pHkModifierUtils_cctor = reinterpret_cast<HkModifierUtils_cctor_t>(get_export("??0HkModifierUtils@@QEAA@AEBV0@@Z"));
     pHkQueryDispatcher_cctor_function_0_3 = reinterpret_cast<HkQueryDispatcher_cctor_function_0_3_t>(get_export("??0HkNearestPointsToPointArgs@HkQueryDispatcher@@QEAA@AEBU01@@Z"));
     pHkQueryDispatcher_cctor_function_0_4 = reinterpret_cast<HkQueryDispatcher_cctor_function_0_4_t>(get_export("??0HkNearestQueryHit@HkQueryDispatcher@@QEAA@AEBU01@@Z"));
     pHkPackedBodyInfo_cctor = reinterpret_cast<HkPackedBodyInfo_cctor_t>(get_export("??0HkPackedBodyInfo@@QEAA@AEBU0@@Z"));
+    pHkPackedBodyInfoExtended_cctor = reinterpret_cast<HkPackedBodyInfoExtended_cctor_t>(get_export("??0HkPackedBodyInfoExtended@@QEAA@AEBU0@@Z"));
     pHkPackedBodyProxy_cctor = reinterpret_cast<HkPackedBodyProxy_cctor_t>(get_export("??0HkPackedBodyProxy@@QEAA@AEBU0@@Z"));
+    pHkPackedRelativeTransform_cctor = reinterpret_cast<HkPackedRelativeTransform_cctor_t>(get_export("??0HkPackedRelativeTransform@@QEAA@AEBU0@@Z"));
     pHkPackedRigidBodyData_cctor = reinterpret_cast<HkPackedRigidBodyData_cctor_t>(get_export("??0HkPackedRigidBodyData@@QEAA@AEBU0@@Z"));
     pHkPackedWorldTransform_cctor_1 = reinterpret_cast<HkPackedWorldTransform_cctor_1_t>(get_export("??0HkPackedWorldTransform@@QEAA@AEBU0@@Z"));
     pHkPostProjectionUtilitySettings_cctor = reinterpret_cast<HkPostProjectionUtilitySettings_cctor_t>(get_export("??0HkPostProjectionUtilitySettings@@QEAA@AEBU0@@Z"));
@@ -2832,6 +2892,8 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pvrShapeFlags_cctor = reinterpret_cast<vrShapeFlags_cctor_t>(get_export("??0vrShapeFlags@@QEAA@AEBU0@@Z"));
     pvrShapeKey_cctor = reinterpret_cast<vrShapeKey_cctor_t>(get_export("??0vrShapeKey@@QEAA@AEBU0@@Z"));
     pvrTriggerEventInfo_cctor = reinterpret_cast<vrTriggerEventInfo_cctor_t>(get_export("??0vrTriggerEventInfo@@QEAA@AEBU0@@Z"));
+    pvrWorldBufferSettings_cctor = reinterpret_cast<vrWorldBufferSettings_cctor_t>(get_export("??0vrWorldBufferSettings@@QEAA@AEBU0@@Z"));
+    pvrWorldSnapshotExporter_cctor = reinterpret_cast<vrWorldSnapshotExporter_cctor_t>(get_export("??0vrWorldSnapshotExporter@@QEAA@AEBU0@@Z"));
     pHkConstraintHandler_dtor = reinterpret_cast<HkConstraintHandler_dtor_t>(get_export("??1HkConstraintHandler@@QEAA@XZ"));
     pHkDebugProcessManager_dtor = reinterpret_cast<HkDebugProcessManager_dtor_t>(get_export("??1HkDebugProcessManager@@QEAA@XZ"));
     pHkSession_dtor = reinterpret_cast<HkSession_dtor_t>(get_export("??1HkSession@@QEAA@XZ"));
@@ -2860,6 +2922,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pAddConstraintHandler = reinterpret_cast<AddConstraintHandler_t>(get_export("?AddConstraintHandler@HkSession@@QEAAPEAUHkConstraintHandler@@PEBVhknpConstraintGroupCinfo@@@Z"));
     pAddInstances = reinterpret_cast<AddInstances_t>(get_export("?AddInstances@@YAXPEAVhknpCompoundShape@@AEBV?$hkArrayView@$$CBUHkPackedCompoundShapeInstance@@@@AEBV?$hkArrayView@I@@@Z"));
     pAddMassChangerModifier = reinterpret_cast<AddMassChangerModifier_t>(get_export("?AddMassChangerModifier@HkSession@@QEAAPEAVHkMassChangerModifier@@XZ"));
+    pAddOrRemoveReference = reinterpret_cast<AddOrRemoveReference_t>(get_export("?AddOrRemoveReference@HkColliderQueryDispatcher@@SAX_NAEAU?$HkBufferReference@UHkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@@@@Z"));
     pAddToWorld = reinterpret_cast<AddToWorld_t>(get_export("?AddToWorld@HkRagdoll@@QEAAXW4AdditionMode@hknpWorldWriter@@W4ActivationMode@3@@Z"));
     pHkGridShapeStorage_Allocate = reinterpret_cast<HkGridShapeStorage_Allocate_t>(get_export("?Allocate@HkGridShapeStorage@@QEAAHPEAUBoundingBoxI@@HPEBVhknpShape@@@Z"));
     pHkSimdTreeGridShapeStorage_Allocate = reinterpret_cast<HkSimdTreeGridShapeStorage_Allocate_t>(get_export("?Allocate@HkSimdTreeGridShapeStorage@@QEAAHPEBVhknpShape@@@Z"));
@@ -2882,6 +2945,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pAllocateMalleableConstraintData = reinterpret_cast<AllocateMalleableConstraintData_t>(get_export("?AllocateMalleableConstraintData@HkConstraintHandler@@SAPEAVhknpMalleableConstraintData@@MPEAVhknpConstraintData@@@Z"));
     pAllocateMassDistributionRef = reinterpret_cast<AllocateMassDistributionRef_t>(get_export("?AllocateMassDistributionRef@@YAPEAUhknpRefMassDistribution@@AEBUhkDiagonalizedMassProperties@@@Z"));
     pAllocateMesh = reinterpret_cast<AllocateMesh_t>(get_export("?AllocateMesh@@YAPEBVhknpShape@@AEBV?$hkArrayView@$$CBVhkVector4f@@@@AEBV?$hkArrayView@$$CBUHkTriangle@@@@AEBUMeshShapeArgs@@@Z"));
+    pAllocateMotion = reinterpret_cast<AllocateMotion_t>(get_export("?AllocateMotion@HkWorld@@SA?AUhknpMotionId@@AEAVhknpWorld@@PEBUhknpMotionProperties@@W4Enum@hknpMotionType@@AEBUVelocityPair@@@Z"));
     pAllocateMutableCompound = reinterpret_cast<AllocateMutableCompound_t>(get_export("?AllocateMutableCompound@@YAPEBVhknpShape@@H@Z"));
     pAllocateNullCollider = reinterpret_cast<AllocateNullCollider_t>(get_export("?AllocateNullCollider@@YAPEBVhknpShape@@M@Z"));
     pAllocatePalette = reinterpret_cast<AllocatePalette_t>(get_export("?AllocatePalette@HkMaterialLibrary@@QEAAPEAVhknpMaterialPalette@@XZ"));
@@ -2900,10 +2964,11 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pAllocateWheel = reinterpret_cast<AllocateWheel_t>(get_export("?AllocateWheel@@YAPEBVhknpShape@@AEBVhkVector4f@@0MHMPEAI1@Z"));
     pAllocateWheelConstraintData = reinterpret_cast<AllocateWheelConstraintData_t>(get_export("?AllocateWheelConstraintData@HkConstraintHandler@@SAPEAVhknpWheelConstraintData@@AEBUHkWheelConstraintArgs@1@@Z"));
     pAllocateWorld = reinterpret_cast<AllocateWorld_t>(get_export("?AllocateWorld@HkSession@@QEAAAEAVhknpWorld@@_NAEBVhkVector4d@@1H@Z"));
+    pApplyRagdollBodyImpulse = reinterpret_cast<ApplyRagdollBodyImpulse_t>(get_export("?ApplyRagdollBodyImpulse@HkRagdoll@@QEBAXHAEBVhkVector4d@@AEBVhkVector4f@@@Z"));
     pAreBodiesConnected = reinterpret_cast<AreBodiesConnected_t>(get_export("?AreBodiesConnected@HkConstraintHandler@@QEBA_NAEAVhknpWorld@@UhknpBodyId@@1@Z"));
     pAssignFrom = reinterpret_cast<AssignFrom_t>(get_export("?AssignFrom@HkMaterialConfiguration@HkMaterialLibrary@@SA?AU12@AEBVhknpMaterial@@@Z"));
     pAssignTo = reinterpret_cast<AssignTo_t>(get_export("?AssignTo@HkMaterialConfiguration@HkMaterialLibrary@@QEBAXAEAVhknpMaterial@@@Z"));
-    pAttachBodies = reinterpret_cast<AttachBodies_t>(get_export("?AttachBodies@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HU3@@Z"));
+    pAttachBodiesToMotion = reinterpret_cast<AttachBodiesToMotion_t>(get_export("?AttachBodiesToMotion@HkSession@@QEAAXAEAVhknpWorld@@PEBUhknpBodyId@@HPEBUhknpMotionProperties@@UhknpMotionId@@@Z"));
     pBeginRecording = reinterpret_cast<BeginRecording_t>(get_export("?BeginRecording@HkSession@@QEBAXPEBD@Z"));
     pBuildColliderMassProperties = reinterpret_cast<BuildColliderMassProperties_t>(get_export("?BuildColliderMassProperties@@YAXPEBVhknpShape@@UMassBuildConfig@@AEAUhkDiagonalizedMassProperties@@@Z"));
     pGlobal_CalcAabb = reinterpret_cast<Global_CalcAabb_t>(get_export("?CalcAabb@@YAXPEBVhknpShape@@AEBUHkPackedWorldTransform@@AEAVhkAabb@@@Z"));
@@ -2934,7 +2999,6 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pDecomposeIntoConvexHulls = reinterpret_cast<DecomposeIntoConvexHulls_t>(get_export("?DecomposeIntoConvexHulls@@YAXAEBUConfig@hkConvexDecomposition@@AEBUHkGeometryRef@@AEAU?$HkBufferReference@VhkVector4f@@@@AEAU?$HkBufferReference@H@@PEAUOutputInfo@2@@Z"));
     pDecomposeIntoConvexShapes = reinterpret_cast<DecomposeIntoConvexShapes_t>(get_export("?DecomposeIntoConvexShapes@@YAXAEBUConfig@hkConvexDecomposition@@AEBUHkGeometryRef@@AEBUConvexShapeArgs@@AEAU?$HkBufferReference@PEBVhknpShape@@@@PEAUOutputInfo@2@@Z"));
     pDestroyBodyConstraints = reinterpret_cast<DestroyBodyConstraints_t>(get_export("?DestroyBodyConstraints@HkConstraintHandler@@QEAAXAEAVhknpWorld@@UhknpBodyId@@@Z"));
-    pDetachBodies = reinterpret_cast<DetachBodies_t>(get_export("?DetachBodies@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HAEAU?$HkBufferReference@UHkBodyMotionInfo@@@@@Z"));
     pDiscardAsyncUpdate = reinterpret_cast<DiscardAsyncUpdate_t>(get_export("?DiscardAsyncUpdate@HkVoxelShape@@SAXPEAX@Z"));
     pHkLoadedShapeInfo_Dispose = reinterpret_cast<HkLoadedShapeInfo_Dispose_t>(get_export("?Dispose@HkLoadedShapeInfo@@QEAAXXZ"));
     pHkMaterialLibrary_Dispose = reinterpret_cast<HkMaterialLibrary_Dispose_t>(get_export("?Dispose@HkMaterialLibrary@@SAXXZ"));
@@ -2946,10 +3010,13 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pDrawSphere = reinterpret_cast<DrawSphere_t>(get_export("?DrawSphere@HkDebugDraw@@SAXAEBVhkVector4d@@UhkColorArgb@@1@Z"));
     pDrawText = reinterpret_cast<DrawText_t>(get_export("?DrawText@HkDebugDraw@@SAXPEBDAEBVhkVector4d@@UhkColorArgb@@@Z"));
     pDrawTransformedAABB = reinterpret_cast<DrawTransformedAABB_t>(get_export("?DrawTransformedAABB@HkDebugDraw@@SAXAEBUHkPackedWorldTransform@@AEBVhkAabb@@UhkColorArgb@@2@Z"));
+    pDrive = reinterpret_cast<Drive_t>(get_export("?Drive@HkRagdoll@@QEAAX_NUHkPackedWorldTransform@@M@Z"));
+    pDriveBodyTo = reinterpret_cast<DriveBodyTo_t>(get_export("?DriveBodyTo@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEBUHkPackedWorldTransform@@AEBUHkBodyDrivingSettings@@@Z"));
     pEnableVisualDebugger = reinterpret_cast<EnableVisualDebugger_t>(get_export("?EnableVisualDebugger@HkSession@@QEAAXXZ"));
     pEnd = reinterpret_cast<End_t>(get_export("?End@HkAdaptedCallbacks@HkMainSystem@@SAXPEBX@Z"));
     pEndRecording = reinterpret_cast<EndRecording_t>(get_export("?EndRecording@HkSession@@QEBAXXZ"));
     pError = reinterpret_cast<Error_t>(get_export("?Error@UserCallbacks@HkMainSystem@@QEBAXIPEBD@Z"));
+    pExportWorldSnapshot = reinterpret_cast<ExportWorldSnapshot_t>(get_export("?ExportWorldSnapshot@vrWorldSnapshotExporter@@SA_NAEAVhknpWorld@@PEBD_N@Z"));
     pFilterManifolds = reinterpret_cast<FilterManifolds_t>(get_export("?FilterManifolds@HkBreakHandlerModifier@@QEAAXXZ"));
     pFindByName = reinterpret_cast<FindByName_t>(get_export("?FindByName@HkMaterialLibrary@@QEBA?AUhknpMaterialId@@PEBD@Z"));
     pFindLeaf = reinterpret_cast<FindLeaf_t>(get_export("?FindLeaf@@YA_NPEBVhknpShape@@IPEAPEBV1@PEAUHkTriangleOrQuad@@PEAG@Z"));
@@ -2959,6 +3026,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pFrom = reinterpret_cast<From_t>(get_export("?From@HkWorldData@@SAAEAU1@AEBVhknpWorld@@@Z"));
     pGenerateGroups = reinterpret_cast<GenerateGroups_t>(get_export("?GenerateGroups@HkBreakHandlerModifier@@QEAAXAEAU?$HkBufferReference@UHkManifoldGroupConfig@HkManifoldGroup@@@@@Z"));
     pHkMaterialLibrary_Get = reinterpret_cast<HkMaterialLibrary_Get_t>(get_export("?Get@HkMaterialLibrary@@QEBA?BUHkMaterialConfiguration@1@UhknpMaterialId@@@Z"));
+    pGetActiveBodiesCount = reinterpret_cast<GetActiveBodiesCount_t>(get_export("?GetActiveBodiesCount@HkRagdoll@@QEBAHXZ"));
     pGetAndAdvance = reinterpret_cast<GetAndAdvance_t>(get_export("?GetAndAdvance@HkDataFilterIterator@@QEAA_NXZ"));
     pGetAngle = reinterpret_cast<GetAngle_t>(get_export("?GetAngle@HkConstraintHandler@@SAMPEBVhknpConstraint@@@Z"));
     pGetBodiesInfo = reinterpret_cast<GetBodiesInfo_t>(get_export("?GetBodiesInfo@HkWorld@@SAXAEBUHkBodyInfoUpdate@@H@Z"));
@@ -2969,7 +3037,8 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pGetBodyMassProperties = reinterpret_cast<GetBodyMassProperties_t>(get_export("?GetBodyMassProperties@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEAUhkDiagonalizedMassProperties@@@Z"));
     pGetBodyMotion = reinterpret_cast<GetBodyMotion_t>(get_export("?GetBodyMotion@HkWorld@@SA?AUhknpMotionId@@AEAVhknpWorld@@UhknpBodyId@@PEAPEBVhknpMotion@@@Z"));
     pGetBodyMotionId = reinterpret_cast<GetBodyMotionId_t>(get_export("?GetBodyMotionId@HkWorld@@SA?AUhknpMotionId@@AEAVhknpWorld@@UhknpBodyId@@@Z"));
-    pGetBodyTransform = reinterpret_cast<GetBodyTransform_t>(get_export("?GetBodyTransform@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEAUHkPackedWorldTransform@@@Z"));
+    pHkRagdoll_GetBodyTransform = reinterpret_cast<HkRagdoll_GetBodyTransform_t>(get_export("?GetBodyTransform@HkRagdoll@@QEBA?AUHkPackedWorldTransform@@H@Z"));
+    pHkWorld_GetBodyTransform = reinterpret_cast<HkWorld_GetBodyTransform_t>(get_export("?GetBodyTransform@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEAUHkPackedWorldTransform@@@Z"));
     pGetChild = reinterpret_cast<GetChild_t>(get_export("?GetChild@@YA_NPEBVhknpShape@@IPEAPEBV1@@Z"));
     pHkSimdTreeGridShape_GetChildShape = reinterpret_cast<HkSimdTreeGridShape_GetChildShape_t>(get_export("?GetChildShape@HkSimdTreeGridShape@@QEBAPEBVhknpShape@@I@Z"));
     pHkSparseGridShape_GetChildShape = reinterpret_cast<HkSparseGridShape_GetChildShape_t>(get_export("?GetChildShape@HkSparseGridShape@@QEBAPEBVhknpShape@@I@Z"));
@@ -2987,18 +3056,21 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pGetFirstManifold = reinterpret_cast<GetFirstManifold_t>(get_export("?GetFirstManifold@HkManifoldGroup@@QEBAHXZ"));
     pGetHighSkeletonBones = reinterpret_cast<GetHighSkeletonBones_t>(get_export("?GetHighSkeletonBones@HkRagdollAsset@@QEBAXAEAU?$HkBufferReference@UHkSkeletonBone@@@@@Z"));
     pGetInteractionType = reinterpret_cast<GetInteractionType_t>(get_export("?GetInteractionType@HkMassChangerModifier@@QEBA?AW4HkLayerInteraction_InteractType@@PEBVhknpWorld@@AEBUhknpBodyId@@1@Z"));
+    pHkSimdTreeGridShape_GetLeafTransform = reinterpret_cast<HkSimdTreeGridShape_GetLeafTransform_t>(get_export("?GetLeafTransform@HkSimdTreeGridShape@@QEBA?AVhkTransformf@@I@Z"));
+    pHkSparseGridShape_GetLeafTransform = reinterpret_cast<HkSparseGridShape_GetLeafTransform_t>(get_export("?GetLeafTransform@HkSparseGridShape@@QEBA?AVhkTransformf@@I@Z"));
     pGetLibrary = reinterpret_cast<GetLibrary_t>(get_export("?GetLibrary@HkMaterialLibrary@@SAPEAU1@XZ"));
     pGetLowBoneToRagdollRigidBody = reinterpret_cast<GetLowBoneToRagdollRigidBody_t>(get_export("?GetLowBoneToRagdollRigidBody@HkRagdollAsset@@QEBAXAEAU?$HkBufferReference@H@@@Z"));
     pGetLowSkeletonBones = reinterpret_cast<GetLowSkeletonBones_t>(get_export("?GetLowSkeletonBones@HkRagdollAsset@@QEBAXAEAU?$HkBufferReference@UHkSkeletonBone@@@@@Z"));
     pGetManifolds = reinterpret_cast<GetManifolds_t>(get_export("?GetManifolds@HkBreakHandlerModifier@@QEBAPEBUHkManifoldInfo@@AEAH@Z"));
     pGlobal_GetMaterial = reinterpret_cast<Global_GetMaterial_t>(get_export("?GetMaterial@@YA?AUhknpMaterialId@@PEBVhknpWorld@@UhknpBodyId@@I@Z"));
     pHkMaterialLibrary_GetMaterial = reinterpret_cast<HkMaterialLibrary_GetMaterial_t>(get_export("?GetMaterial@HkMaterialLibrary@@SA?AUhknpMaterialId@@PEAVhknpMaterialPalette@@U?$hkHandle@G$0PPPP@UhknpMaterialPaletteEntryIdDiscriminant@@@@@Z"));
+    pGetMotionSharedBodiesInfo = reinterpret_cast<GetMotionSharedBodiesInfo_t>(get_export("?GetMotionSharedBodiesInfo@HkWorld@@SAXPEAUHkPackedBodyInfoExtended@@H@Z"));
     pConvexShapeArgs_GetMutable_void = reinterpret_cast<ConvexShapeArgs_GetMutable_void_t>(get_export("?GetMutable@ConvexShapeArgs@@QEBA?AW4Mutability@hknpShape@@XZ"));
     pConvexShapeArgs_GetMutable_isMutable = reinterpret_cast<ConvexShapeArgs_GetMutable_isMutable_t>(get_export("?GetMutable@ConvexShapeArgs@@SA?AW4Mutability@hknpShape@@_N@Z"));
     pGetPaletteMaterials = reinterpret_cast<GetPaletteMaterials_t>(get_export("?GetPaletteMaterials@HkMaterialLibrary@@SAPEBUhknpMaterialId@@PEBVhknpMaterialPalette@@PEAH@Z"));
     pGetProcesses = reinterpret_cast<GetProcesses_t>(get_export("?GetProcesses@HkDebugProcessManager@@QEAAXPEAPEAUProcessInfo@1@PEAH@Z"));
     pGetQuadCount = reinterpret_cast<GetQuadCount_t>(get_export("?GetQuadCount@HkVoxelShape@@QEBAHXZ"));
-    pGetRagdollPose = reinterpret_cast<GetRagdollPose_t>(get_export("?GetRagdollPose@HkRagdoll@@QEBAXAEAU?$HkBufferReference@VhkQsTransformf@@@@UHkPackedWorldTransform@@@Z"));
+    pGetRagdollPose = reinterpret_cast<GetRagdollPose_t>(get_export("?GetRagdollPose@HkRagdoll@@QEBAXPEBUHkPackedRelativeTransform@@PEAU2@HUHkPackedWorldTransform@@@Z"));
     pGetRagdollRigidBodiesCount = reinterpret_cast<GetRagdollRigidBodiesCount_t>(get_export("?GetRagdollRigidBodiesCount@HkRagdollAsset@@QEBAHXZ"));
     pGetRootBodyTransform = reinterpret_cast<GetRootBodyTransform_t>(get_export("?GetRootBodyTransform@HkRagdoll@@QEBA?AUHkPackedWorldTransform@@XZ"));
     pHkSimdTreeGridShape_GetShapeChunk = reinterpret_cast<HkSimdTreeGridShape_GetShapeChunk_t>(get_export("?GetShapeChunk@HkSimdTreeGridShape@@QEBA?AUVector3I@@I@Z"));
@@ -3055,6 +3127,8 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pProcessNativeAssertFail = reinterpret_cast<ProcessNativeAssertFail_t>(get_export("?ProcessNativeAssertFail@HkMainSystem@@SAXPEBD@Z"));
     pHkColliderQueryDispatcher_QueryAabb = reinterpret_cast<HkColliderQueryDispatcher_QueryAabb_t>(get_export("?QueryAabb@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@UvrShapeKey@@@@@Z"));
     pHkQueryDispatcher_QueryAabb = reinterpret_cast<HkQueryDispatcher_QueryAabb_t>(get_export("?QueryAabb@HkQueryDispatcher@@SAXAEBUHkQueryAabbArgs@1@AEAU?$HkBufferReference@UhknpBodyId@@@@@Z"));
+    pQueryGeometry = reinterpret_cast<QueryGeometry_t>(get_export("?QueryGeometry@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@VhkVector4f@@@@AEAU?$HkBufferReference@UHkTriangle@@@@@Z"));
+    pQueryLeaves = reinterpret_cast<QueryLeaves_t>(get_export("?QueryLeaves@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@UHkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@@@AEAU?$HkBufferReference@UHkColliderLeafQueryTriangleOrQuadHit@HkColliderQueryDispatcher@@@@@Z"));
     pHkSimdTreeGridShape_RegisterFunctions = reinterpret_cast<HkSimdTreeGridShape_RegisterFunctions_t>(get_export("?RegisterFunctions@HkSimdTreeGridShape@@SAXXZ"));
     pHkSparseGridShape_RegisterFunctions = reinterpret_cast<HkSparseGridShape_RegisterFunctions_t>(get_export("?RegisterFunctions@HkSparseGridShape@@SAXXZ"));
     pRegisterShape = reinterpret_cast<RegisterShape_t>(get_export("?RegisterShape@HkMaterialLibrary@@QEAAXPEAVhknpShape@@PEBVhknpMaterialPalette@@@Z"));
@@ -3067,11 +3141,13 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pHkSimdTreeGridShape_RemoveShapes = reinterpret_cast<HkSimdTreeGridShape_RemoveShapes_t>(get_export("?RemoveShapes@HkSimdTreeGridShape@@QEAAXPEBIH@Z"));
     pHkSparseGridShape_RemoveShapes = reinterpret_cast<HkSparseGridShape_RemoveShapes_t>(get_export("?RemoveShapes@HkSparseGridShape@@QEAAXPEBIH@Z"));
     pHkMaterialLibrary_Reset = reinterpret_cast<HkMaterialLibrary_Reset_t>(get_export("?Reset@HkMaterialLibrary@@QEAAXXZ"));
+    pRestoreBodiesMotionType = reinterpret_cast<RestoreBodiesMotionType_t>(get_export("?RestoreBodiesMotionType@HkSession@@QEAA?AUhknpMotionId@@AEAVhknpWorld@@PEBUhknpBodyId@@HPEAUhknpMotionProperties@@W4Enum@hknpMotionType@@@Z"));
     pSetAngle = reinterpret_cast<SetAngle_t>(get_export("?SetAngle@HkConstraintHandler@@SAXPEBVhknpConstraint@@M@Z"));
     pSetAngularMotorSettings = reinterpret_cast<SetAngularMotorSettings_t>(get_export("?SetAngularMotorSettings@HkConstraintHandler@@SAXPEAVhknp6DofConstraintData@@PEAVhknpConstraintMotor@@@Z"));
     pSetAssociatedTransform = reinterpret_cast<SetAssociatedTransform_t>(get_export("?SetAssociatedTransform@HkVoxelShape@@QEAAXAEBUHkPackedWorldTransform@@@Z"));
     pSetBodiesEntityLayerIndex = reinterpret_cast<SetBodiesEntityLayerIndex_t>(get_export("?SetBodiesEntityLayerIndex@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HI@Z"));
     pSetBodiesInfo = reinterpret_cast<SetBodiesInfo_t>(get_export("?SetBodiesInfo@HkWorld@@SAXAEBUHkBodyInfoCollection@@HAEBUHkDataFilter@@@Z"));
+    pSetBodiesMotion = reinterpret_cast<SetBodiesMotion_t>(get_export("?SetBodiesMotion@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HUhknpMotionId@@@Z"));
     pSetBodiesMotionType = reinterpret_cast<SetBodiesMotionType_t>(get_export("?SetBodiesMotionType@HkSession@@QEAA?AUhknpMotionId@@AEAVhknpWorld@@PEAUhknpBodyId@@HPEAUhknpMotionProperties@@W4Enum@hknpMotionType@@@Z"));
     pSetBodyBreakingLayer = reinterpret_cast<SetBodyBreakingLayer_t>(get_export("?SetBodyBreakingLayer@HkBreakHandlerModifier@@SAXAEAVhknpWorld@@UhknpBodyId@@E@Z"));
     pSetBodyEntityLayerIndex = reinterpret_cast<SetBodyEntityLayerIndex_t>(get_export("?SetBodyEntityLayerIndex@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@I@Z"));
@@ -3085,6 +3161,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pHkSparseGridShape_SetChunkShapes = reinterpret_cast<HkSparseGridShape_SetChunkShapes_t>(get_export("?SetChunkShapes@HkSparseGridShape@@QEAAXUVector3I@@PEAPEBVhknpShape@@HPEAI_N@Z"));
     pSetColliderDeletionCallback = reinterpret_cast<SetColliderDeletionCallback_t>(get_export("?SetColliderDeletionCallback@@YAXP6AXPEBVhknpShape@@@Z@Z"));
     pSetColliderMassProperties = reinterpret_cast<SetColliderMassProperties_t>(get_export("?SetColliderMassProperties@@YAXPEAVhknpShape@@AEAUhkDiagonalizedMassProperties@@@Z"));
+    pSetCollisionEventsEnabled = reinterpret_cast<SetCollisionEventsEnabled_t>(get_export("?SetCollisionEventsEnabled@HkRagdoll@@QEAAX_N@Z"));
     pSetConstraintGroupCinfo = reinterpret_cast<SetConstraintGroupCinfo_t>(get_export("?SetConstraintGroupCinfo@HkConstraintHandler@@QEBAXAEBVhknpConstraintGroupCinfo@@@Z"));
     pHkDebugProcessManager_SetDebuggedWorld = reinterpret_cast<HkDebugProcessManager_SetDebuggedWorld_t>(get_export("?SetDebuggedWorld@HkDebugProcessManager@@QEAAXQEAVhknpWorld@@@Z"));
     pHkSession_SetDebuggedWorld = reinterpret_cast<HkSession_SetDebuggedWorld_t>(get_export("?SetDebuggedWorld@HkSession@@QEAAXQEAVhknpWorld@@@Z"));
@@ -3107,14 +3184,17 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pSetMotorEnabled_1 = reinterpret_cast<SetMotorEnabled_1_t>(get_export("?SetMotorEnabled@HkConstraintHandler@@SAXAEAVhknpPrismaticConstraintData@@_N@Z"));
     pSetMotorEnabled_2 = reinterpret_cast<SetMotorEnabled_2_t>(get_export("?SetMotorEnabled@HkConstraintHandler@@SAXAEAVhknpWheelConstraintData@@_N@Z"));
     pSetNotifyDeletion = reinterpret_cast<SetNotifyDeletion_t>(get_export("?SetNotifyDeletion@@YAXPEBVhknpShape@@_N@Z"));
+    pSetPostProjectionEnabled = reinterpret_cast<SetPostProjectionEnabled_t>(get_export("?SetPostProjectionEnabled@HkRagdoll@@QEAAX_N@Z"));
     pSetProcessEnabled = reinterpret_cast<SetProcessEnabled_t>(get_export("?SetProcessEnabled@HkDebugProcessManager@@QEAAXH_N@Z"));
     pSetShapesViewerOptions = reinterpret_cast<SetShapesViewerOptions_t>(get_export("?SetShapesViewerOptions@HkDebugProcessManager@@QEAAXHAEBUHkShapeViewerOptions@1@@Z"));
     pSetSolved = reinterpret_cast<SetSolved_t>(get_export("?SetSolved@HkManifoldGroup@@QEAAXXZ"));
     pSetSolverParameters = reinterpret_cast<SetSolverParameters_t>(get_export("?SetSolverParameters@HkSession@@QEAAXHHMM@Z"));
     pSetStaticBodiesInfo = reinterpret_cast<SetStaticBodiesInfo_t>(get_export("?SetStaticBodiesInfo@HkWorld@@SAXPEBUHkStaticBodyInfoUpdate@@H@Z"));
+    pSetTargetPose = reinterpret_cast<SetTargetPose_t>(get_export("?SetTargetPose@HkRagdoll@@QEAAXPEBUHkPackedRelativeTransform@@H@Z"));
     pSetUnbreached = reinterpret_cast<SetUnbreached_t>(get_export("?SetUnbreached@HkManifoldGroup@@QEAAXXZ"));
     pSimplifyGeometry = reinterpret_cast<SimplifyGeometry_t>(get_export("?SimplifyGeometry@@YAXAEAUHkGeometryRef@@UHkSimplificationParameters@@@Z"));
     pStepCollide = reinterpret_cast<StepCollide_t>(get_export("?StepCollide@HkSession@@QEAAXM@Z"));
+    pStepDebugDraw = reinterpret_cast<StepDebugDraw_t>(get_export("?StepDebugDraw@HkSession@@QEAAXM@Z"));
     pStepSolve = reinterpret_cast<StepSolve_t>(get_export("?StepSolve@HkSession@@QEAAXM@Z"));
     pStepVDB = reinterpret_cast<StepVDB_t>(get_export("?StepVDB@HkSession@@QEAAXM@Z"));
     pSubscribeToMutation = reinterpret_cast<SubscribeToMutation_t>(get_export("?SubscribeToMutation@@YAXPEBVhknpShape@@PEAX@Z"));
@@ -3138,7 +3218,6 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pUnsubscribeFromMutation = reinterpret_cast<UnsubscribeFromMutation_t>(get_export("?UnsubscribeFromMutation@@YAXPEBVhknpShape@@PEAX@Z"));
     pHkManifoldInfo_Update = reinterpret_cast<HkManifoldInfo_Update_t>(get_export("?Update@HkManifoldInfo@@QEAAXAEBUhkcdManifold4@@PEBVhknpBody@@1PEBVhknpWorld@@@Z"));
     pHkMaterialLibrary_Update = reinterpret_cast<HkMaterialLibrary_Update_t>(get_export("?Update@HkMaterialLibrary@@QEAAXUhknpMaterialId@@AEBUHkMaterialConfiguration@1@@Z"));
-    pHkRagdoll_Update = reinterpret_cast<HkRagdoll_Update_t>(get_export("?Update@HkRagdoll@@QEAAXAEAU?$HkBufferReference@VhkQsTransformf@@@@_NUHkPackedWorldTransform@@M@Z"));
     pUpdateAndDraw = reinterpret_cast<UpdateAndDraw_t>(get_export("?UpdateAndDraw@HkDebugProcessManager@@QEAAXM@Z"));
     pUpdateBodyCOMCenteredBoundingRadius = reinterpret_cast<UpdateBodyCOMCenteredBoundingRadius_t>(get_export("?UpdateBodyCOMCenteredBoundingRadius@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@@Z"));
     pUpdateCamera = reinterpret_cast<UpdateCamera_t>(get_export("?UpdateCamera@HkDebugProcessManager@@QEAAXPEBUHkCameraInfo@1@@Z"));
@@ -3146,6 +3225,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pUpdateInstances = reinterpret_cast<UpdateInstances_t>(get_export("?UpdateInstances@@YAXPEAVhknpCompoundShape@@AEBV?$hkArrayView@$$CBI@@AEBV?$hkArrayView@$$CBUHkPackedCompoundShapeInstance@@@@@Z"));
     pUpdateMotionTransforms = reinterpret_cast<UpdateMotionTransforms_t>(get_export("?UpdateMotionTransforms@HkWorld@@SAXAEAVhknpWorld@@AEBVhknpMotion@@@Z"));
     pUpdateMotorsParameters = reinterpret_cast<UpdateMotorsParameters_t>(get_export("?UpdateMotorsParameters@HkRagdoll@@QEAAXAEBUHkPoweredMotorsParams@@@Z"));
+    pUpdatePostProjectionSettings = reinterpret_cast<UpdatePostProjectionSettings_t>(get_export("?UpdatePostProjectionSettings@HkRagdoll@@QEAAXAEBUHkPostProjectionUtilitySettings@@@Z"));
     pHkVoxelShape_UpdateRange_updateData = reinterpret_cast<HkVoxelShape_UpdateRange_updateData_t>(get_export("?UpdateRange@HkVoxelShape@@QEAAXPEAX@Z"));
     pHkVoxelShape_UpdateRange_min_max_content_materials = reinterpret_cast<HkVoxelShape_UpdateRange_min_max_content_materials_t>(get_export("?UpdateRange@HkVoxelShape@@QEAAXUVector3I@@0PEAE1@Z"));
     pHkSimdTreeGridShape_UpdateShapes = reinterpret_cast<HkSimdTreeGridShape_UpdateShapes_t>(get_export("?UpdateShapes@HkSimdTreeGridShape@@QEAAXPEBIPEAPEBVhknpShape@@H@Z"));
@@ -3836,97 +3916,98 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pGlobal_ctor_void_17 = reinterpret_cast<Global_ctor_void_17_t>(get_export("HkMaterialLibrary_S_HkExtendedMaterialPalette_HkExtendedMaterialPalette"));
     pGlobal_cctor_function_0_21 = reinterpret_cast<Global_cctor_function_0_21_t>(get_export("HkMaterialLibrary_S_HkExtendedMaterialPalette_HkExtendedMaterialPalette___1__S_HkMaterialLibrary_S_HkExtendedMaterialPalette"));
     pGlobal_dtor_void_5 = reinterpret_cast<Global_dtor_void_5_t>(get_export("HkMaterialLibrary__HkMaterialLibrary"));
-    pGlobal_ctor_void_18 = reinterpret_cast<Global_ctor_void_18_t>(get_export("HkPackedBodyProxy_HkPackedBodyProxy"));
+    pGlobal_ctor_void_18 = reinterpret_cast<Global_ctor_void_18_t>(get_export("HkPackedBodyInfoExtended_HkPackedBodyInfoExtended"));
+    pGlobal_ctor_void_19 = reinterpret_cast<Global_ctor_void_19_t>(get_export("HkPackedBodyProxy_HkPackedBodyProxy"));
     pGlobal_cctor_function_0_22 = reinterpret_cast<Global_cctor_function_0_22_t>(get_export("HkPackedCompoundShapeInstance_HkPackedCompoundShapeInstance___1__S_HkPackedCompoundShapeInstance"));
     pGlobal_ctor_preciseTransform = reinterpret_cast<Global_ctor_preciseTransform_t>(get_export("HkPackedWorldTransform_HkPackedWorldTransform___1__S_hkPreciseTransform"));
-    pGlobal_ctor_void_19 = reinterpret_cast<Global_ctor_void_19_t>(get_export("HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings"));
-    pGlobal_ctor_void_20 = reinterpret_cast<Global_ctor_void_20_t>(get_export("HkPoweredMotorsParams_HkPoweredMotorsParams"));
-    pGlobal_ctor_void_21 = reinterpret_cast<Global_ctor_void_21_t>(get_export("HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData"));
-    pGlobal_ctor_void_22 = reinterpret_cast<Global_ctor_void_22_t>(get_export("HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs"));
-    pGlobal_ctor_void_23 = reinterpret_cast<Global_ctor_void_23_t>(get_export("HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs"));
+    pGlobal_ctor_void_20 = reinterpret_cast<Global_ctor_void_20_t>(get_export("HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings"));
+    pGlobal_ctor_void_21 = reinterpret_cast<Global_ctor_void_21_t>(get_export("HkPoweredMotorsParams_HkPoweredMotorsParams"));
+    pGlobal_ctor_void_22 = reinterpret_cast<Global_ctor_void_22_t>(get_export("HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData"));
+    pGlobal_ctor_void_23 = reinterpret_cast<Global_ctor_void_23_t>(get_export("HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs"));
+    pGlobal_ctor_void_24 = reinterpret_cast<Global_ctor_void_24_t>(get_export("HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs"));
     pGlobal_cctor_function_0_23 = reinterpret_cast<Global_cctor_function_0_23_t>(get_export("HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs___1__S_HkQueryDispatcher_S_HkCastShapeArgs"));
     pGlobal_cctor_function_0_24 = reinterpret_cast<Global_cctor_function_0_24_t>(get_export("HkQueryDispatcher_S_HkHighPrecisionTransform_HkHighPrecisionTransform___1__S_HkQueryDispatcher_S_HkHighPrecisionTransform"));
-    pGlobal_ctor_void_24 = reinterpret_cast<Global_ctor_void_24_t>(get_export("HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs"));
-    pGlobal_ctor_void_25 = reinterpret_cast<Global_ctor_void_25_t>(get_export("HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs"));
+    pGlobal_ctor_void_25 = reinterpret_cast<Global_ctor_void_25_t>(get_export("HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs"));
+    pGlobal_ctor_void_26 = reinterpret_cast<Global_ctor_void_26_t>(get_export("HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs"));
     pGlobal_cctor_function_0_25 = reinterpret_cast<Global_cctor_function_0_25_t>(get_export("HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs___1__S_HkQueryDispatcher_S_HkNearestPointsToShapeArgs"));
-    pGlobal_ctor_void_26 = reinterpret_cast<Global_ctor_void_26_t>(get_export("HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit"));
-    pGlobal_ctor_void_27 = reinterpret_cast<Global_ctor_void_27_t>(get_export("HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs"));
-    pGlobal_ctor_void_28 = reinterpret_cast<Global_ctor_void_28_t>(get_export("HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs"));
-    pGlobal_ctor_void_29 = reinterpret_cast<Global_ctor_void_29_t>(get_export("HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit"));
+    pGlobal_ctor_void_27 = reinterpret_cast<Global_ctor_void_27_t>(get_export("HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit"));
+    pGlobal_ctor_void_28 = reinterpret_cast<Global_ctor_void_28_t>(get_export("HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs"));
+    pGlobal_ctor_void_29 = reinterpret_cast<Global_ctor_void_29_t>(get_export("HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs"));
+    pGlobal_ctor_void_30 = reinterpret_cast<Global_ctor_void_30_t>(get_export("HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit"));
     pGlobal_cctor_function_0_26 = reinterpret_cast<Global_cctor_function_0_26_t>(get_export("HkRagdollAsset_HkRagdollAsset___1__S_HkRagdollAsset"));
-    pGlobal_ctor_void_30 = reinterpret_cast<Global_ctor_void_30_t>(get_export("HkRagdollCinfo_HkRagdollCinfo"));
+    pGlobal_ctor_void_31 = reinterpret_cast<Global_ctor_void_31_t>(get_export("HkRagdollCinfo_HkRagdollCinfo"));
     pGlobal_cctor_function_0_27 = reinterpret_cast<Global_cctor_function_0_27_t>(get_export("HkRagdollCinfo_HkRagdollCinfo___1__S_HkRagdollCinfo"));
     pGlobal_dtor_void_6 = reinterpret_cast<Global_dtor_void_6_t>(get_export("HkRagdollCinfo__HkRagdollCinfo"));
     pGlobal_cctor_function_0_28 = reinterpret_cast<Global_cctor_function_0_28_t>(get_export("HkRagdoll_HkRagdoll___1__S_HkRagdoll"));
-    pGlobal_ctor_void_31 = reinterpret_cast<Global_ctor_void_31_t>(get_export("HkSerializableFracture_HkSerializableFracture"));
+    pGlobal_ctor_void_32 = reinterpret_cast<Global_ctor_void_32_t>(get_export("HkSerializableFracture_HkSerializableFracture"));
     pGlobal_cctor_function_0_29 = reinterpret_cast<Global_cctor_function_0_29_t>(get_export("HkSerializationShapeScalingUtil_HkSerializationShapeScalingUtil___1__S_HkSerializationShapeScalingUtil"));
-    pGlobal_ctor_void_32 = reinterpret_cast<Global_ctor_void_32_t>(get_export("HkSession_U_HkLodSettings_HkLodSettings"));
+    pGlobal_ctor_void_33 = reinterpret_cast<Global_ctor_void_33_t>(get_export("HkSession_U_HkLodSettings_HkLodSettings"));
     pGlobal_ctor_other = reinterpret_cast<Global_ctor_other_t>(get_export("HkSession_U_HkLodSettings_HkLodSettings__1__S_HkSession_U_HkLodSettings"));
-    pGlobal_ctor_void_33 = reinterpret_cast<Global_ctor_void_33_t>(get_export("HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage"));
+    pGlobal_ctor_void_34 = reinterpret_cast<Global_ctor_void_34_t>(get_export("HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage"));
     pGlobal_cctor_function_0_30 = reinterpret_cast<Global_cctor_function_0_30_t>(get_export("HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage___1__S_HkSimdTreeGridShapeStorage"));
-    pGlobal_ctor_void_34 = reinterpret_cast<Global_ctor_void_34_t>(get_export("HkSimdTreeGridShape_S_Input_Input"));
-    pGlobal_ctor_void_35 = reinterpret_cast<Global_ctor_void_35_t>(get_export("HkSparseGridShape_S_Input_Input"));
-    pGlobal_ctor_void_36 = reinterpret_cast<Global_ctor_void_36_t>(get_export("HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate"));
+    pGlobal_ctor_void_35 = reinterpret_cast<Global_ctor_void_35_t>(get_export("HkSimdTreeGridShape_S_Input_Input"));
+    pGlobal_ctor_void_36 = reinterpret_cast<Global_ctor_void_36_t>(get_export("HkSparseGridShape_S_Input_Input"));
+    pGlobal_ctor_void_37 = reinterpret_cast<Global_ctor_void_37_t>(get_export("HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate"));
     pGlobal_cctor_function_0_31 = reinterpret_cast<Global_cctor_function_0_31_t>(get_export("HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate___1__S_HkStaticBodyInfoUpdate"));
-    pGlobal_ctor_void_37 = reinterpret_cast<Global_ctor_void_37_t>(get_export("HkStatistics_HkStatistics"));
-    pGlobal_ctor_void_38 = reinterpret_cast<Global_ctor_void_38_t>(get_export("HkWorldData_HkWorldData"));
-    pGlobal_ctor_void_39 = reinterpret_cast<Global_ctor_void_39_t>(get_export("MassBuildConfig_MassBuildConfig"));
-    pGlobal_ctor_void_40 = reinterpret_cast<Global_ctor_void_40_t>(get_export("MeshShapeArgs_MeshShapeArgs"));
-    pGlobal_ctor_void_41 = reinterpret_cast<Global_ctor_void_41_t>(get_export("MigrationData_MigrationData"));
-    pGlobal_ctor_void_42 = reinterpret_cast<Global_ctor_void_42_t>(get_export("c__N_hkConvexDecomposition_S_Config_Config"));
-    pGlobal_ctor_void_43 = reinterpret_cast<Global_ctor_void_43_t>(get_export("c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo"));
+    pGlobal_ctor_void_38 = reinterpret_cast<Global_ctor_void_38_t>(get_export("HkStatistics_HkStatistics"));
+    pGlobal_ctor_void_39 = reinterpret_cast<Global_ctor_void_39_t>(get_export("HkWorldData_HkWorldData"));
+    pGlobal_ctor_void_40 = reinterpret_cast<Global_ctor_void_40_t>(get_export("MassBuildConfig_MassBuildConfig"));
+    pGlobal_ctor_void_41 = reinterpret_cast<Global_ctor_void_41_t>(get_export("MeshShapeArgs_MeshShapeArgs"));
+    pGlobal_ctor_void_42 = reinterpret_cast<Global_ctor_void_42_t>(get_export("MigrationData_MigrationData"));
+    pGlobal_ctor_void_43 = reinterpret_cast<Global_ctor_void_43_t>(get_export("c__N_hkConvexDecomposition_S_Config_Config"));
+    pGlobal_ctor_void_44 = reinterpret_cast<Global_ctor_void_44_t>(get_export("c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo"));
     pGlobal_cctor_function_0_32 = reinterpret_cast<Global_cctor_function_0_32_t>(get_export("c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo___1__N_hkConvexDecomposition_S_ConvexPieceInfo"));
-    pGlobal_ctor_void_44 = reinterpret_cast<Global_ctor_void_44_t>(get_export("c__N_hkConvexDecomposition_S_IProgress_IProgress"));
+    pGlobal_ctor_void_45 = reinterpret_cast<Global_ctor_void_45_t>(get_export("c__N_hkConvexDecomposition_S_IProgress_IProgress"));
     pGlobal_cctor_function_0_33 = reinterpret_cast<Global_cctor_function_0_33_t>(get_export("c__N_hkConvexDecomposition_S_IProgress_IProgress___1__N_hkConvexDecomposition_S_IProgress"));
-    pGlobal_ctor_void_45 = reinterpret_cast<Global_ctor_void_45_t>(get_export("c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo"));
+    pGlobal_ctor_void_46 = reinterpret_cast<Global_ctor_void_46_t>(get_export("c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo"));
     pGlobal_cctor_function_0_34 = reinterpret_cast<Global_cctor_function_0_34_t>(get_export("c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo___1__N_hkConvexDecomposition_S_OutputInfo"));
     pGlobal_dtor_void_7 = reinterpret_cast<Global_dtor_void_7_t>(get_export("c__N_hkConvexDecomposition_S_OutputInfo__OutputInfo"));
     pGlobal_cctor_function_0_35 = reinterpret_cast<Global_cctor_function_0_35_t>(get_export("hkDiagonalizedMassProperties_hkDiagonalizedMassProperties___1__S_hkDiagonalizedMassProperties"));
-    pGlobal_ctor_void_46 = reinterpret_cast<Global_ctor_void_46_t>(get_export("hkQTransform_hkQTransform"));
-    pGlobal_ctor_void_47 = reinterpret_cast<Global_ctor_void_47_t>(get_export("hkStringPtr_hkStringPtr"));
-    pGlobal_ctor_void_48 = reinterpret_cast<Global_ctor_void_48_t>(get_export("hknpBodyIdAndIndex_hknpBodyIdAndIndex"));
-    pGlobal_ctor_void_49 = reinterpret_cast<Global_ctor_void_49_t>(get_export("hknpBodyQualityId_hknpBodyQualityId"));
+    pGlobal_ctor_void_47 = reinterpret_cast<Global_ctor_void_47_t>(get_export("hkQTransform_hkQTransform"));
+    pGlobal_ctor_void_48 = reinterpret_cast<Global_ctor_void_48_t>(get_export("hkStringPtr_hkStringPtr"));
+    pGlobal_ctor_void_49 = reinterpret_cast<Global_ctor_void_49_t>(get_export("hknpBodyIdAndIndex_hknpBodyIdAndIndex"));
+    pGlobal_ctor_void_50 = reinterpret_cast<Global_ctor_void_50_t>(get_export("hknpBodyQualityId_hknpBodyQualityId"));
     pGlobal_ctor_i = reinterpret_cast<Global_ctor_i_t>(get_export("hknpBodyQualityId_hknpBodyQualityId_I"));
     pctor_1 = reinterpret_cast<ctor_1_t>(get_export("hknpBodyQualityId_hknpBodyQualityId___S_hknpBodyQualityId_E_Preset"));
     pGlobal_dtor_void_8 = reinterpret_cast<Global_dtor_void_8_t>(get_export("hknpBody__hknpBody"));
-    pGlobal_ctor_void_50 = reinterpret_cast<Global_ctor_void_50_t>(get_export("hknpBody_hknpBody"));
-    pGlobal_ctor_void_51 = reinterpret_cast<Global_ctor_void_51_t>(get_export("hknpCompressedAabbThresholds_hknpCompressedAabbThresholds"));
-    pGlobal_ctor_void_52 = reinterpret_cast<Global_ctor_void_52_t>(get_export("hknpConnectivityGraph_S_Buffer_Buffer"));
-    pGlobal_ctor_void_53 = reinterpret_cast<Global_ctor_void_53_t>(get_export("hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray"));
+    pGlobal_ctor_void_51 = reinterpret_cast<Global_ctor_void_51_t>(get_export("hknpBody_hknpBody"));
+    pGlobal_ctor_void_52 = reinterpret_cast<Global_ctor_void_52_t>(get_export("hknpCompressedAabbThresholds_hknpCompressedAabbThresholds"));
+    pGlobal_ctor_void_53 = reinterpret_cast<Global_ctor_void_53_t>(get_export("hknpConnectivityGraph_S_Buffer_Buffer"));
+    pGlobal_ctor_void_54 = reinterpret_cast<Global_ctor_void_54_t>(get_export("hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray"));
     pGlobal_dtor_void_9 = reinterpret_cast<Global_dtor_void_9_t>(get_export("hknpConnectivityGraph_S_CompressedIntArray__CompressedIntArray"));
-    pGlobal_ctor_void_54 = reinterpret_cast<Global_ctor_void_54_t>(get_export("hknpConnectivityGraph_S_DisjointInput_DisjointInput"));
+    pGlobal_ctor_void_55 = reinterpret_cast<Global_ctor_void_55_t>(get_export("hknpConnectivityGraph_S_DisjointInput_DisjointInput"));
     pGlobal_ctor_buffer = reinterpret_cast<Global_ctor_buffer_t>(get_export("hknpConnectivityGraph_S_DisjointResult_DisjointResult___1__S_hknpConnectivityGraph_S_Buffer"));
     pGlobal_cctor_1_function_0_5 = reinterpret_cast<Global_cctor_1_function_0_5_t>(get_export("hknpConnectivityGraph_S_DisjointResult_DisjointResult___1__S_hknpConnectivityGraph_S_DisjointResult"));
-    pGlobal_ctor_void_55 = reinterpret_cast<Global_ctor_void_55_t>(get_export("hknpConnectivityGraph_S_DisjointResult_S_Set_Set"));
+    pGlobal_ctor_void_56 = reinterpret_cast<Global_ctor_void_56_t>(get_export("hknpConnectivityGraph_S_DisjointResult_S_Set_Set"));
     pGlobal_cctor_function_0_36 = reinterpret_cast<Global_cctor_function_0_36_t>(get_export("hknpConnectivityGraph_S_DisjointResult_S_Set_Set___1__S_hknpConnectivityGraph_S_DisjointResult_S_Set"));
     pGlobal_dtor_void_10 = reinterpret_cast<Global_dtor_void_10_t>(get_export("hknpConnectivityGraph_S_DisjointResult_S_Set__Set"));
     pGlobal_dtor_void_11 = reinterpret_cast<Global_dtor_void_11_t>(get_export("hknpConnectivityGraph_S_DisjointResult__DisjointResult"));
-    pGlobal_ctor_void_56 = reinterpret_cast<Global_ctor_void_56_t>(get_export("hknpConnectivityGraph_S_Edge_Edge"));
+    pGlobal_ctor_void_57 = reinterpret_cast<Global_ctor_void_57_t>(get_export("hknpConnectivityGraph_S_Edge_Edge"));
     pGlobal_cctor_function_0_37 = reinterpret_cast<Global_cctor_function_0_37_t>(get_export("hknpConnectivityGraph_S_LocalBuffer_LocalBuffer___1__S_hknpConnectivityGraph_S_LocalBuffer"));
     pGlobal_dtor_void_12 = reinterpret_cast<Global_dtor_void_12_t>(get_export("hknpConnectivityGraph_S_LocalBuffer__LocalBuffer"));
-    pGlobal_ctor_void_57 = reinterpret_cast<Global_ctor_void_57_t>(get_export("hknpConstraintData_S_AppliedImpulses_AppliedImpulses"));
-    pGlobal_ctor_void_58 = reinterpret_cast<Global_ctor_void_58_t>(get_export("hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse"));
+    pGlobal_ctor_void_58 = reinterpret_cast<Global_ctor_void_58_t>(get_export("hknpConstraintData_S_AppliedImpulses_AppliedImpulses"));
+    pGlobal_ctor_void_59 = reinterpret_cast<Global_ctor_void_59_t>(get_export("hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse"));
     pGlobal_ctor_type_mutability = reinterpret_cast<Global_ctor_type_mutability_t>(get_export("hknpConstraintData_hknpConstraintData___S_hknpConstraintData_E_ConstraintType___S_hknpConstraintData_E_Mutability"));
-    pGlobal_ctor_void_59 = reinterpret_cast<Global_ctor_void_59_t>(get_export("hknpConstraintGroupDirectSolverSettings_hknpConstraintGroupDirectSolverSettings"));
+    pGlobal_ctor_void_60 = reinterpret_cast<Global_ctor_void_60_t>(get_export("hknpConstraintGroupDirectSolverSettings_hknpConstraintGroupDirectSolverSettings"));
     pGlobal_dtor_void_13 = reinterpret_cast<Global_dtor_void_13_t>(get_export("hknpConstraint__hknpConstraint"));
-    pGlobal_ctor_void_60 = reinterpret_cast<Global_ctor_void_60_t>(get_export("hknpConstraint_hknpConstraint"));
-    pGlobal_ctor_void_61 = reinterpret_cast<Global_ctor_void_61_t>(get_export("hknpMaterialPalette_hknpMaterialPalette"));
+    pGlobal_ctor_void_61 = reinterpret_cast<Global_ctor_void_61_t>(get_export("hknpConstraint_hknpConstraint"));
+    pGlobal_ctor_void_62 = reinterpret_cast<Global_ctor_void_62_t>(get_export("hknpMaterialPalette_hknpMaterialPalette"));
     pGlobal_dtor_void_14 = reinterpret_cast<Global_dtor_void_14_t>(get_export("hknpMaterial__hknpMaterial"));
-    pGlobal_ctor_void_62 = reinterpret_cast<Global_ctor_void_62_t>(get_export("hknpMotion_hknpMotion"));
+    pGlobal_ctor_void_63 = reinterpret_cast<Global_ctor_void_63_t>(get_export("hknpMotion_hknpMotion"));
     pGlobal_cctor_other_3 = reinterpret_cast<Global_cctor_other_3_t>(get_export("hknpMotion_hknpMotion___1__S_hknpMotion"));
-    pGlobal_ctor_void_63 = reinterpret_cast<Global_ctor_void_63_t>(get_export("hknpRefMaterial_hknpRefMaterial"));
+    pGlobal_ctor_void_64 = reinterpret_cast<Global_ctor_void_64_t>(get_export("hknpRefMaterial_hknpRefMaterial"));
     pGlobal_cctor_function_0_38 = reinterpret_cast<Global_cctor_function_0_38_t>(get_export("hknpRefMaterial_hknpRefMaterial___1__S_hknpRefMaterial"));
-    pGlobal_ctor_void_64 = reinterpret_cast<Global_ctor_void_64_t>(get_export("hknpShapeInstance_hknpShapeInstance"));
+    pGlobal_ctor_void_65 = reinterpret_cast<Global_ctor_void_65_t>(get_export("hknpShapeInstance_hknpShapeInstance"));
     pGlobal_ctor_shape_transform = reinterpret_cast<Global_ctor_shape_transform_t>(get_export("hknpShapeInstance_hknpShapeInstance__1__S_hknpShape___1__S_hkQTransform"));
     pGlobal_cctor_other_4 = reinterpret_cast<Global_cctor_other_4_t>(get_export("hknpShapeInstance_hknpShapeInstance___1__S_hknpShapeInstance"));
-    pGlobal_ctor_void_65 = reinterpret_cast<Global_ctor_void_65_t>(get_export("hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig"));
-    pGlobal_ctor_void_66 = reinterpret_cast<Global_ctor_void_66_t>(get_export("hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig"));
+    pGlobal_ctor_void_66 = reinterpret_cast<Global_ctor_void_66_t>(get_export("hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig"));
+    pGlobal_ctor_void_67 = reinterpret_cast<Global_ctor_void_67_t>(get_export("hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig"));
     pGlobal_ctor_level = reinterpret_cast<Global_ctor_level_t>(get_export("hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig___E_hknpLevelOfDetail"));
     pGlobal_cctor_function_0_39 = reinterpret_cast<Global_cctor_function_0_39_t>(get_export("hknpShape_S_MassConfig_MassConfig___1__S_hknpShape_S_MassConfig"));
-    pGlobal_ctor_void_67 = reinterpret_cast<Global_ctor_void_67_t>(get_export("hknpShape_S_SdfContactPointOutput_SdfContactPointOutput"));
+    pGlobal_ctor_void_68 = reinterpret_cast<Global_ctor_void_68_t>(get_export("hknpShape_S_SdfContactPointOutput_SdfContactPointOutput"));
     pGlobal_dtor_void_15 = reinterpret_cast<Global_dtor_void_15_t>(get_export("hknpShape_S_SdfContactPointOutput__SdfContactPointOutput"));
-    pGlobal_ctor_void_68 = reinterpret_cast<Global_ctor_void_68_t>(get_export("hknpShape_S_SdfContactPoint_SdfContactPoint"));
-    pGlobal_ctor_void_69 = reinterpret_cast<Global_ctor_void_69_t>(get_export("hknpShape_S_SurfaceGeometry_SurfaceGeometry"));
+    pGlobal_ctor_void_69 = reinterpret_cast<Global_ctor_void_69_t>(get_export("hknpShape_S_SdfContactPoint_SdfContactPoint"));
+    pGlobal_ctor_void_70 = reinterpret_cast<Global_ctor_void_70_t>(get_export("hknpShape_S_SurfaceGeometry_SurfaceGeometry"));
     pGlobal_cctor_function_0_40 = reinterpret_cast<Global_cctor_function_0_40_t>(get_export("hknpShape_S_SurfaceGeometry_SurfaceGeometry___1__S_hknpShape_S_SurfaceGeometry"));
     pGlobal_dtor_void_16 = reinterpret_cast<Global_dtor_void_16_t>(get_export("hknpShape_S_SurfaceGeometry__SurfaceGeometry"));
     pGlobal_ctor_provider_partIndex = reinterpret_cast<Global_ctor_provider_partIndex_t>(get_export("vrBodyPartId_vrBodyPartId___E_vrBodyPartProvider_I"));
@@ -3935,11 +4016,11 @@ void initialize(const char *dll_path, const char *sidecar_path)
     pGlobal_cctor_function_0_43 = reinterpret_cast<Global_cctor_function_0_43_t>(get_export("vrChildShapeCollisionMaskProperty_vrChildShapeCollisionMaskProperty___1__S_vrChildShapeCollisionMaskProperty"));
     pGlobal_ctor_rootShape = reinterpret_cast<Global_ctor_rootShape_t>(get_export("vrRootBreakableShapeProperty_vrRootBreakableShapeProperty__1__S_hknpBreakableCompoundShape"));
     pGlobal_cctor_1_function_0_6 = reinterpret_cast<Global_cctor_1_function_0_6_t>(get_export("vrRootBreakableShapeProperty_vrRootBreakableShapeProperty___1__S_vrRootBreakableShapeProperty"));
-    pGlobal_ctor_void_70 = reinterpret_cast<Global_ctor_void_70_t>(get_export("vrShapeKey_vrShapeKey"));
+    pGlobal_ctor_void_71 = reinterpret_cast<Global_ctor_void_71_t>(get_export("vrShapeKey_vrShapeKey"));
     pGlobal_ctor_value = reinterpret_cast<Global_ctor_value_t>(get_export("vrShapeKey_vrShapeKey_k"));
-    pGlobal_ctor_void_71 = reinterpret_cast<Global_ctor_void_71_t>(get_export("vrTriggerEventInfo_vrTriggerEventInfo"));
+    pGlobal_ctor_void_72 = reinterpret_cast<Global_ctor_void_72_t>(get_export("vrTriggerEventInfo_vrTriggerEventInfo"));
     pGlobal_dtor_void_17 = reinterpret_cast<Global_dtor_void_17_t>(get_export("vrTriggerManager__vrTriggerManager"));
-    pGlobal_ctor_void_72 = reinterpret_cast<Global_ctor_void_72_t>(get_export("vrTriggerManager_vrTriggerManager"));
+    pGlobal_ctor_void_73 = reinterpret_cast<Global_ctor_void_73_t>(get_export("vrTriggerManager_vrTriggerManager"));
     pGlobal_cctor_function_0_44 = reinterpret_cast<Global_cctor_function_0_44_t>(get_export("vrTriggerManager_vrTriggerManager___1__S_vrTriggerManager"));
 }
 }
@@ -4131,6 +4212,15 @@ void * HkConstraintHandler_cctor_function_0_2(void * instance, void * function_0
     return pHkConstraintHandler_cctor_function_0_2(instance, function_0);
 }
 
+void * HkBodyDrivingSettings_cctor(void * instance, void * function_0) __asm__("\"??0HkBodyDrivingSettings$$QEAA$AEBU0$$Z\"");
+void * HkBodyDrivingSettings_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkBodyDrivingSettings_cctor)
+        throw std::runtime_error("Missing Physics export: ??0HkBodyDrivingSettings@@QEAA@AEBU0@@Z");
+    return pHkBodyDrivingSettings_cctor(instance, function_0);
+}
+
 void * HkBodyInfoCollection_cctor(void * instance, void * function_0) __asm__("\"??0HkBodyInfoCollection$$QEAA$AEBU0$$Z\"");
 void * HkBodyInfoCollection_cctor(void * instance, void * function_0)
 {
@@ -4311,40 +4401,58 @@ void * HkCharacterStateManagerCinfo_cctor(void * instance, void * function_0)
     return pHkCharacterStateManagerCinfo_cctor(instance, function_0);
 }
 
-void * HkColliderQueryDispatcher_cctor_function_0(void * instance, void * function_0) __asm__("\"??0HkColliderNearestQueryHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0(void * instance, void * function_0) __asm__("\"??0HkColliderLeafQueryColliderHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
 void * HkColliderQueryDispatcher_cctor_function_0(void * instance, void * function_0)
 {
     ensure_thread_info();
     if (!pHkColliderQueryDispatcher_cctor_function_0)
-        throw std::runtime_error("Missing Physics export: ??0HkColliderNearestQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
+        throw std::runtime_error("Missing Physics export: ??0HkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
     return pHkColliderQueryDispatcher_cctor_function_0(instance, function_0);
 }
 
-void * HkColliderQueryDispatcher_cctor_function_0_2(void * instance, void * function_0) __asm__("\"??0HkColliderQueryAABBArgs$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0_2(void * instance, void * function_0) __asm__("\"??0HkColliderLeafQueryTriangleOrQuadHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
 void * HkColliderQueryDispatcher_cctor_function_0_2(void * instance, void * function_0)
 {
     ensure_thread_info();
     if (!pHkColliderQueryDispatcher_cctor_function_0_2)
-        throw std::runtime_error("Missing Physics export: ??0HkColliderQueryAABBArgs@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
+        throw std::runtime_error("Missing Physics export: ??0HkColliderLeafQueryTriangleOrQuadHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
     return pHkColliderQueryDispatcher_cctor_function_0_2(instance, function_0);
 }
 
-void * HkColliderQueryDispatcher_cctor_function_0_3(void * instance, void * function_0) __asm__("\"??0HkColliderQueryDispatcher$$QEAA$AEBV0$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0_3(void * instance, void * function_0) __asm__("\"??0HkColliderNearestQueryHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
 void * HkColliderQueryDispatcher_cctor_function_0_3(void * instance, void * function_0)
 {
     ensure_thread_info();
     if (!pHkColliderQueryDispatcher_cctor_function_0_3)
-        throw std::runtime_error("Missing Physics export: ??0HkColliderQueryDispatcher@@QEAA@AEBV0@@Z");
+        throw std::runtime_error("Missing Physics export: ??0HkColliderNearestQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
     return pHkColliderQueryDispatcher_cctor_function_0_3(instance, function_0);
 }
 
-void * HkColliderQueryDispatcher_cctor_function_0_4(void * instance, void * function_0) __asm__("\"??0HkColliderSweepQueryHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0_4(void * instance, void * function_0) __asm__("\"??0HkColliderQueryAABBArgs$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
 void * HkColliderQueryDispatcher_cctor_function_0_4(void * instance, void * function_0)
 {
     ensure_thread_info();
     if (!pHkColliderQueryDispatcher_cctor_function_0_4)
-        throw std::runtime_error("Missing Physics export: ??0HkColliderSweepQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
+        throw std::runtime_error("Missing Physics export: ??0HkColliderQueryAABBArgs@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
     return pHkColliderQueryDispatcher_cctor_function_0_4(instance, function_0);
+}
+
+void * HkColliderQueryDispatcher_cctor_function_0_5(void * instance, void * function_0) __asm__("\"??0HkColliderQueryDispatcher$$QEAA$AEBV0$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0_5(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkColliderQueryDispatcher_cctor_function_0_5)
+        throw std::runtime_error("Missing Physics export: ??0HkColliderQueryDispatcher@@QEAA@AEBV0@@Z");
+    return pHkColliderQueryDispatcher_cctor_function_0_5(instance, function_0);
+}
+
+void * HkColliderQueryDispatcher_cctor_function_0_6(void * instance, void * function_0) __asm__("\"??0HkColliderSweepQueryHit$HkColliderQueryDispatcher$$QEAA$AEBU01$$Z\"");
+void * HkColliderQueryDispatcher_cctor_function_0_6(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkColliderQueryDispatcher_cctor_function_0_6)
+        throw std::runtime_error("Missing Physics export: ??0HkColliderSweepQueryHit@HkColliderQueryDispatcher@@QEAA@AEBU01@@Z");
+    return pHkColliderQueryDispatcher_cctor_function_0_6(instance, function_0);
 }
 
 void * HkCollisionQueryCollector_cctor(void * instance, void * function_0) __asm__("\"??0HkCollisionQueryCollector$$QEAA$AEBU0$$Z\"");
@@ -4428,13 +4536,13 @@ void * HkGeometryRef_cctor(void * instance, void * function_0)
     return pHkGeometryRef_cctor(instance, function_0);
 }
 
-void * HkGravityModifier_ctor(void * instance, void * world, float multiplier) __asm__("\"??0HkGravityModifier$$QEAA$PEAVhknpWorld$$M$Z\"");
-void * HkGravityModifier_ctor(void * instance, void * world, float multiplier)
+void * HkGravityModifier_ctor(void * instance, void * world, float multiplier, float minGravityChangeToActivateBodies) __asm__("\"??0HkGravityModifier$$QEAA$PEAVhknpWorld$$MM$Z\"");
+void * HkGravityModifier_ctor(void * instance, void * world, float multiplier, float minGravityChangeToActivateBodies)
 {
     ensure_thread_info();
     if (!pHkGravityModifier_ctor)
-        throw std::runtime_error("Missing Physics export: ??0HkGravityModifier@@QEAA@PEAVhknpWorld@@M@Z");
-    return pHkGravityModifier_ctor(instance, world, multiplier);
+        throw std::runtime_error("Missing Physics export: ??0HkGravityModifier@@QEAA@PEAVhknpWorld@@MM@Z");
+    return pHkGravityModifier_ctor(instance, world, multiplier, minGravityChangeToActivateBodies);
 }
 
 void * HkGravityUpdate_cctor(void * instance, void * function_0) __asm__("\"??0HkGravityUpdate$$QEAA$AEBU0$$Z\"");
@@ -4572,6 +4680,15 @@ void * HkMaterialLibrary_ctor(void * instance)
     return pHkMaterialLibrary_ctor(instance);
 }
 
+void * HkModelSkeletonBone_cctor(void * instance, void * function_0) __asm__("\"??0HkModelSkeletonBone$$QEAA$AEBU0$$Z\"");
+void * HkModelSkeletonBone_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkModelSkeletonBone_cctor)
+        throw std::runtime_error("Missing Physics export: ??0HkModelSkeletonBone@@QEAA@AEBU0@@Z");
+    return pHkModelSkeletonBone_cctor(instance, function_0);
+}
+
 void * HkModifierUtils_cctor(void * instance, void * function_0) __asm__("\"??0HkModifierUtils$$QEAA$AEBV0$$Z\"");
 void * HkModifierUtils_cctor(void * instance, void * function_0)
 {
@@ -4608,6 +4725,15 @@ void * HkPackedBodyInfo_cctor(void * instance, void * function_0)
     return pHkPackedBodyInfo_cctor(instance, function_0);
 }
 
+void * HkPackedBodyInfoExtended_cctor(void * instance, void * function_0) __asm__("\"??0HkPackedBodyInfoExtended$$QEAA$AEBU0$$Z\"");
+void * HkPackedBodyInfoExtended_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkPackedBodyInfoExtended_cctor)
+        throw std::runtime_error("Missing Physics export: ??0HkPackedBodyInfoExtended@@QEAA@AEBU0@@Z");
+    return pHkPackedBodyInfoExtended_cctor(instance, function_0);
+}
+
 void * HkPackedBodyProxy_cctor(void * instance, void * function_0) __asm__("\"??0HkPackedBodyProxy$$QEAA$AEBU0$$Z\"");
 void * HkPackedBodyProxy_cctor(void * instance, void * function_0)
 {
@@ -4615,6 +4741,15 @@ void * HkPackedBodyProxy_cctor(void * instance, void * function_0)
     if (!pHkPackedBodyProxy_cctor)
         throw std::runtime_error("Missing Physics export: ??0HkPackedBodyProxy@@QEAA@AEBU0@@Z");
     return pHkPackedBodyProxy_cctor(instance, function_0);
+}
+
+void * HkPackedRelativeTransform_cctor(void * instance, void * function_0) __asm__("\"??0HkPackedRelativeTransform$$QEAA$AEBU0$$Z\"");
+void * HkPackedRelativeTransform_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pHkPackedRelativeTransform_cctor)
+        throw std::runtime_error("Missing Physics export: ??0HkPackedRelativeTransform@@QEAA@AEBU0@@Z");
+    return pHkPackedRelativeTransform_cctor(instance, function_0);
 }
 
 void * HkPackedRigidBodyData_cctor(void * instance, void * function_0) __asm__("\"??0HkPackedRigidBodyData$$QEAA$AEBU0$$Z\"");
@@ -4731,7 +4866,7 @@ void * HkSession_ctor(void * instance, void * sessionCinfo)
     ensure_thread_info();
     if (!pHkSession_ctor)
         throw std::runtime_error("Missing Physics export: ??0HkSession@@QEAA@AEBUHkSessionCinfo@0@@Z");
-    alignas(void *) uint8_t cinfo[96];
+    alignas(void *) uint8_t cinfo[112];
     std::memcpy(cinfo, sessionCinfo, sizeof(cinfo));
     void *callback = *reinterpret_cast<void **>(cinfo);
     if (callback)
@@ -5384,6 +5519,24 @@ void * vrTriggerEventInfo_cctor(void * instance, void * function_0)
     return pvrTriggerEventInfo_cctor(instance, function_0);
 }
 
+void * vrWorldBufferSettings_cctor(void * instance, void * function_0) __asm__("\"??0vrWorldBufferSettings$$QEAA$AEBU0$$Z\"");
+void * vrWorldBufferSettings_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pvrWorldBufferSettings_cctor)
+        throw std::runtime_error("Missing Physics export: ??0vrWorldBufferSettings@@QEAA@AEBU0@@Z");
+    return pvrWorldBufferSettings_cctor(instance, function_0);
+}
+
+void * vrWorldSnapshotExporter_cctor(void * instance, void * function_0) __asm__("\"??0vrWorldSnapshotExporter$$QEAA$AEBU0$$Z\"");
+void * vrWorldSnapshotExporter_cctor(void * instance, void * function_0)
+{
+    ensure_thread_info();
+    if (!pvrWorldSnapshotExporter_cctor)
+        throw std::runtime_error("Missing Physics export: ??0vrWorldSnapshotExporter@@QEAA@AEBU0@@Z");
+    return pvrWorldSnapshotExporter_cctor(instance, function_0);
+}
+
 void HkConstraintHandler_dtor(void * instance) __asm__("\"??1HkConstraintHandler$$QEAA$XZ\"");
 void HkConstraintHandler_dtor(void * instance)
 {
@@ -5646,6 +5799,15 @@ void * AddMassChangerModifier(void * instance)
     return pAddMassChangerModifier(instance);
 }
 
+void AddOrRemoveReference(int32_t add, void * colliders) __asm__("\"?AddOrRemoveReference$HkColliderQueryDispatcher$$SAX_NAEAU?$HkBufferReference$UHkColliderLeafQueryColliderHit$HkColliderQueryDispatcher$$$$$Z\"");
+void AddOrRemoveReference(int32_t add, void * colliders)
+{
+    ensure_thread_info();
+    if (!pAddOrRemoveReference)
+        throw std::runtime_error("Missing Physics export: ?AddOrRemoveReference@HkColliderQueryDispatcher@@SAX_NAEAU?$HkBufferReference@UHkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@@@@Z");
+    pAddOrRemoveReference(add, colliders);
+}
+
 void AddToWorld(void * instance, int32_t additionMode, int32_t activationMode) __asm__("\"?AddToWorld$HkRagdoll$$QEAAXW4AdditionMode$hknpWorldWriter$$W4ActivationMode$3$$Z\"");
 void AddToWorld(void * instance, int32_t additionMode, int32_t activationMode)
 {
@@ -5844,6 +6006,15 @@ void * AllocateMesh(void * vertices, void * triangles, void * args)
     return pAllocateMesh(vertices, triangles, args);
 }
 
+void AllocateMotion(void * return_value, void * world, void * properties, int32_t motionType, void * velocities) __asm__("\"?AllocateMotion$HkWorld$$SA?AUhknpMotionId$$AEAVhknpWorld$$PEBUhknpMotionProperties$$W4Enum$hknpMotionType$$AEBUVelocityPair$$$Z\"");
+void AllocateMotion(void * return_value, void * world, void * properties, int32_t motionType, void * velocities)
+{
+    ensure_thread_info();
+    if (!pAllocateMotion)
+        throw std::runtime_error("Missing Physics export: ?AllocateMotion@HkWorld@@SA?AUhknpMotionId@@AEAVhknpWorld@@PEBUhknpMotionProperties@@W4Enum@hknpMotionType@@AEBUVelocityPair@@@Z");
+    pAllocateMotion(return_value, world, properties, motionType, velocities);
+}
+
 void * AllocateMutableCompound(int32_t capacity) __asm__("\"?AllocateMutableCompound$$YAPEBVhknpShape$$H$Z\"");
 void * AllocateMutableCompound(int32_t capacity)
 {
@@ -6013,6 +6184,15 @@ void * AllocateWorld(void * instance, int32_t addVariableTimeStepUtil, void * mi
     return result;
 }
 
+void ApplyRagdollBodyImpulse(void * instance, int32_t ragdollBodyIndex, void * worldPosition, void * impulse) __asm__("\"?ApplyRagdollBodyImpulse$HkRagdoll$$QEBAXHAEBVhkVector4d$$AEBVhkVector4f$$$Z\"");
+void ApplyRagdollBodyImpulse(void * instance, int32_t ragdollBodyIndex, void * worldPosition, void * impulse)
+{
+    ensure_thread_info();
+    if (!pApplyRagdollBodyImpulse)
+        throw std::runtime_error("Missing Physics export: ?ApplyRagdollBodyImpulse@HkRagdoll@@QEBAXHAEBVhkVector4d@@AEBVhkVector4f@@@Z");
+    pApplyRagdollBodyImpulse(instance, ragdollBodyIndex, worldPosition, impulse);
+}
+
 uint8_t AreBodiesConnected(void * instance, void * world, uint64_t bodyA, uint64_t bodyB) __asm__("\"?AreBodiesConnected$HkConstraintHandler$$QEBA_NAEAVhknpWorld$$UhknpBodyId$$1$Z\"");
 uint8_t AreBodiesConnected(void * instance, void * world, uint64_t bodyA, uint64_t bodyB)
 {
@@ -6040,13 +6220,13 @@ void AssignTo(void * instance, void * material)
     pAssignTo(instance, material);
 }
 
-void AttachBodies(void * world, void * bodies, int32_t count, uint64_t targetBodyId) __asm__("\"?AttachBodies$HkWorld$$SAXAEAVhknpWorld$$PEBUhknpBodyId$$HU3$$Z\"");
-void AttachBodies(void * world, void * bodies, int32_t count, uint64_t targetBodyId)
+void AttachBodiesToMotion(void * instance, void * world, void * bodyIds, int32_t count, void * properties, uint32_t motionId) __asm__("\"?AttachBodiesToMotion$HkSession$$QEAAXAEAVhknpWorld$$PEBUhknpBodyId$$HPEBUhknpMotionProperties$$UhknpMotionId$$$Z\"");
+void AttachBodiesToMotion(void * instance, void * world, void * bodyIds, int32_t count, void * properties, uint32_t motionId)
 {
     ensure_thread_info();
-    if (!pAttachBodies)
-        throw std::runtime_error("Missing Physics export: ?AttachBodies@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HU3@@Z");
-    pAttachBodies(world, bodies, count, targetBodyId);
+    if (!pAttachBodiesToMotion)
+        throw std::runtime_error("Missing Physics export: ?AttachBodiesToMotion@HkSession@@QEAAXAEAVhknpWorld@@PEBUhknpBodyId@@HPEBUhknpMotionProperties@@UhknpMotionId@@@Z");
+    pAttachBodiesToMotion(instance, world, bodyIds, count, properties, motionId);
 }
 
 void BeginRecording(void * instance, const char * filePath) __asm__("\"?BeginRecording$HkSession$$QEBAXPEBD$Z\"");
@@ -6327,15 +6507,6 @@ void DestroyBodyConstraints(void * instance, void * world, uint64_t body)
     pDestroyBodyConstraints(instance, world, body);
 }
 
-void DetachBodies(void * world, void * bodies, int32_t count, void * newMotions) __asm__("\"?DetachBodies$HkWorld$$SAXAEAVhknpWorld$$PEBUhknpBodyId$$HAEAU?$HkBufferReference$UHkBodyMotionInfo$$$$$Z\"");
-void DetachBodies(void * world, void * bodies, int32_t count, void * newMotions)
-{
-    ensure_thread_info();
-    if (!pDetachBodies)
-        throw std::runtime_error("Missing Physics export: ?DetachBodies@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HAEAU?$HkBufferReference@UHkBodyMotionInfo@@@@@Z");
-    pDetachBodies(world, bodies, count, newMotions);
-}
-
 void DiscardAsyncUpdate(void * updateData) __asm__("\"?DiscardAsyncUpdate$HkVoxelShape$$SAXPEAX$Z\"");
 void DiscardAsyncUpdate(void * updateData)
 {
@@ -6435,6 +6606,24 @@ void DrawTransformedAABB(void * transform, void * aabb, uint32_t color, uint32_t
     pDrawTransformedAABB(transform, aabb, color, fillColor);
 }
 
+void Drive(void * instance, int32_t discontinuity, void * worldFromModel, float deltaTime) __asm__("\"?Drive$HkRagdoll$$QEAAX_NUHkPackedWorldTransform$$M$Z\"");
+void Drive(void * instance, int32_t discontinuity, void * worldFromModel, float deltaTime)
+{
+    ensure_thread_info();
+    if (!pDrive)
+        throw std::runtime_error("Missing Physics export: ?Drive@HkRagdoll@@QEAAX_NUHkPackedWorldTransform@@M@Z");
+    pDrive(instance, discontinuity, worldFromModel, deltaTime);
+}
+
+void DriveBodyTo(void * world, uint64_t body, void * info, void * settings) __asm__("\"?DriveBodyTo$HkWorld$$SAXAEAVhknpWorld$$UhknpBodyId$$AEBUHkPackedWorldTransform$$AEBUHkBodyDrivingSettings$$$Z\"");
+void DriveBodyTo(void * world, uint64_t body, void * info, void * settings)
+{
+    ensure_thread_info();
+    if (!pDriveBodyTo)
+        throw std::runtime_error("Missing Physics export: ?DriveBodyTo@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEBUHkPackedWorldTransform@@AEBUHkBodyDrivingSettings@@@Z");
+    pDriveBodyTo(world, body, info, settings);
+}
+
 void EnableVisualDebugger(void * instance) __asm__("\"?EnableVisualDebugger$HkSession$$QEAAXXZ\"");
 void EnableVisualDebugger(void * instance)
 {
@@ -6469,6 +6658,15 @@ void Error(void * instance, uint32_t messageId, const char * message)
     if (!pError)
         throw std::runtime_error("Missing Physics export: ?Error@UserCallbacks@HkMainSystem@@QEBAXIPEBD@Z");
     pError(instance, messageId, message);
+}
+
+uint8_t ExportWorldSnapshot(void * world, const char * filePath, int32_t xml) __asm__("\"?ExportWorldSnapshot$vrWorldSnapshotExporter$$SA_NAEAVhknpWorld$$PEBD_N$Z\"");
+uint8_t ExportWorldSnapshot(void * world, const char * filePath, int32_t xml)
+{
+    ensure_thread_info();
+    if (!pExportWorldSnapshot)
+        throw std::runtime_error("Missing Physics export: ?ExportWorldSnapshot@vrWorldSnapshotExporter@@SA_NAEAVhknpWorld@@PEBD_N@Z");
+    return pExportWorldSnapshot(world, filePath, xml);
 }
 
 void FilterManifolds(void * instance) __asm__("\"?FilterManifolds$HkBreakHandlerModifier$$QEAAXXZ\"");
@@ -6550,6 +6748,15 @@ void HkMaterialLibrary_Get(void * instance, void * return_value, uint16_t id)
     if (!pHkMaterialLibrary_Get)
         throw std::runtime_error("Missing Physics export: ?Get@HkMaterialLibrary@@QEBA?BUHkMaterialConfiguration@1@UhknpMaterialId@@@Z");
     pHkMaterialLibrary_Get(instance, return_value, id);
+}
+
+int32_t GetActiveBodiesCount(void * instance) __asm__("\"?GetActiveBodiesCount$HkRagdoll$$QEBAHXZ\"");
+int32_t GetActiveBodiesCount(void * instance)
+{
+    ensure_thread_info();
+    if (!pGetActiveBodiesCount)
+        throw std::runtime_error("Missing Physics export: ?GetActiveBodiesCount@HkRagdoll@@QEBAHXZ");
+    return pGetActiveBodiesCount(instance);
 }
 
 uint8_t GetAndAdvance(void * instance) __asm__("\"?GetAndAdvance$HkDataFilterIterator$$QEAA_NXZ\"");
@@ -6642,13 +6849,22 @@ void GetBodyMotionId(void * return_value, void * world, uint64_t body)
     pGetBodyMotionId(return_value, world, body);
 }
 
-void GetBodyTransform(void * world, uint64_t body, void * worldTransform) __asm__("\"?GetBodyTransform$HkWorld$$SAXAEAVhknpWorld$$UhknpBodyId$$AEAUHkPackedWorldTransform$$$Z\"");
-void GetBodyTransform(void * world, uint64_t body, void * worldTransform)
+void HkRagdoll_GetBodyTransform(void * instance, void * return_value, int32_t ragdollBodyIndex) __asm__("\"?GetBodyTransform$HkRagdoll$$QEBA?AUHkPackedWorldTransform$$H$Z\"");
+void HkRagdoll_GetBodyTransform(void * instance, void * return_value, int32_t ragdollBodyIndex)
 {
     ensure_thread_info();
-    if (!pGetBodyTransform)
+    if (!pHkRagdoll_GetBodyTransform)
+        throw std::runtime_error("Missing Physics export: ?GetBodyTransform@HkRagdoll@@QEBA?AUHkPackedWorldTransform@@H@Z");
+    pHkRagdoll_GetBodyTransform(instance, return_value, ragdollBodyIndex);
+}
+
+void HkWorld_GetBodyTransform(void * world, uint64_t body, void * worldTransform) __asm__("\"?GetBodyTransform$HkWorld$$SAXAEAVhknpWorld$$UhknpBodyId$$AEAUHkPackedWorldTransform$$$Z\"");
+void HkWorld_GetBodyTransform(void * world, uint64_t body, void * worldTransform)
+{
+    ensure_thread_info();
+    if (!pHkWorld_GetBodyTransform)
         throw std::runtime_error("Missing Physics export: ?GetBodyTransform@HkWorld@@SAXAEAVhknpWorld@@UhknpBodyId@@AEAUHkPackedWorldTransform@@@Z");
-    pGetBodyTransform(world, body, worldTransform);
+    pHkWorld_GetBodyTransform(world, body, worldTransform);
 }
 
 uint8_t GetChild(void * compositeCollider, uint32_t index, void * child) __asm__("\"?GetChild$$YA_NPEBVhknpShape$$IPEAPEBV1$$Z\"");
@@ -6804,6 +7020,24 @@ uint8_t GetInteractionType(void * instance, void * world, void * bodyA, void * b
     return pGetInteractionType(instance, world, bodyA, bodyB);
 }
 
+void HkSimdTreeGridShape_GetLeafTransform(void * instance, void * return_value, uint32_t leafId) __asm__("\"?GetLeafTransform$HkSimdTreeGridShape$$QEBA?AVhkTransformf$$I$Z\"");
+void HkSimdTreeGridShape_GetLeafTransform(void * instance, void * return_value, uint32_t leafId)
+{
+    ensure_thread_info();
+    if (!pHkSimdTreeGridShape_GetLeafTransform)
+        throw std::runtime_error("Missing Physics export: ?GetLeafTransform@HkSimdTreeGridShape@@QEBA?AVhkTransformf@@I@Z");
+    pHkSimdTreeGridShape_GetLeafTransform(instance, return_value, leafId);
+}
+
+void HkSparseGridShape_GetLeafTransform(void * instance, void * return_value, uint32_t leafId) __asm__("\"?GetLeafTransform$HkSparseGridShape$$QEBA?AVhkTransformf$$I$Z\"");
+void HkSparseGridShape_GetLeafTransform(void * instance, void * return_value, uint32_t leafId)
+{
+    ensure_thread_info();
+    if (!pHkSparseGridShape_GetLeafTransform)
+        throw std::runtime_error("Missing Physics export: ?GetLeafTransform@HkSparseGridShape@@QEBA?AVhkTransformf@@I@Z");
+    pHkSparseGridShape_GetLeafTransform(instance, return_value, leafId);
+}
+
 void * GetLibrary(void) __asm__("\"?GetLibrary$HkMaterialLibrary$$SAPEAU1$XZ\"");
 void * GetLibrary(void)
 {
@@ -6858,6 +7092,15 @@ void HkMaterialLibrary_GetMaterial(void * return_value, void * palette, uint16_t
     pHkMaterialLibrary_GetMaterial(return_value, palette, entryId);
 }
 
+void GetMotionSharedBodiesInfo(void * bodies, int32_t count) __asm__("\"?GetMotionSharedBodiesInfo$HkWorld$$SAXPEAUHkPackedBodyInfoExtended$$H$Z\"");
+void GetMotionSharedBodiesInfo(void * bodies, int32_t count)
+{
+    ensure_thread_info();
+    if (!pGetMotionSharedBodiesInfo)
+        throw std::runtime_error("Missing Physics export: ?GetMotionSharedBodiesInfo@HkWorld@@SAXPEAUHkPackedBodyInfoExtended@@H@Z");
+    pGetMotionSharedBodiesInfo(bodies, count);
+}
+
 int32_t ConvexShapeArgs_GetMutable_void(void * instance) __asm__("\"?GetMutable$ConvexShapeArgs$$QEBA?AW4Mutability$hknpShape$$XZ\"");
 int32_t ConvexShapeArgs_GetMutable_void(void * instance)
 {
@@ -6903,13 +7146,13 @@ int32_t GetQuadCount(void * instance)
     return pGetQuadCount(instance);
 }
 
-void GetRagdollPose(void * instance, void * modelTransforms, void * worldFromModel) __asm__("\"?GetRagdollPose$HkRagdoll$$QEBAXAEAU?$HkBufferReference$VhkQsTransformf$$$$UHkPackedWorldTransform$$$Z\"");
-void GetRagdollPose(void * instance, void * modelTransforms, void * worldFromModel)
+void GetRagdollPose(void * instance, void * modelLocalPose, void * outModelSpacePose, int32_t count, void * worldFromModel) __asm__("\"?GetRagdollPose$HkRagdoll$$QEBAXPEBUHkPackedRelativeTransform$$PEAU2$HUHkPackedWorldTransform$$$Z\"");
+void GetRagdollPose(void * instance, void * modelLocalPose, void * outModelSpacePose, int32_t count, void * worldFromModel)
 {
     ensure_thread_info();
     if (!pGetRagdollPose)
-        throw std::runtime_error("Missing Physics export: ?GetRagdollPose@HkRagdoll@@QEBAXAEAU?$HkBufferReference@VhkQsTransformf@@@@UHkPackedWorldTransform@@@Z");
-    pGetRagdollPose(instance, modelTransforms, worldFromModel);
+        throw std::runtime_error("Missing Physics export: ?GetRagdollPose@HkRagdoll@@QEBAXPEBUHkPackedRelativeTransform@@PEAU2@HUHkPackedWorldTransform@@@Z");
+    pGetRagdollPose(instance, modelLocalPose, outModelSpacePose, count, worldFromModel);
 }
 
 int32_t GetRagdollRigidBodiesCount(void * instance) __asm__("\"?GetRagdollRigidBodiesCount$HkRagdollAsset$$QEBAHXZ\"");
@@ -7425,6 +7668,24 @@ void HkQueryDispatcher_QueryAabb(void * args, void * outHits)
     pHkQueryDispatcher_QueryAabb(args, outHits);
 }
 
+void QueryGeometry(void * args, void * outVertices, void * outTriangles) __asm__("\"?QueryGeometry$HkColliderQueryDispatcher$$SAXAEBUHkColliderQueryAABBArgs$1$AEAU?$HkBufferReference$VhkVector4f$$$$AEAU?$HkBufferReference$UHkTriangle$$$$$Z\"");
+void QueryGeometry(void * args, void * outVertices, void * outTriangles)
+{
+    ensure_thread_info();
+    if (!pQueryGeometry)
+        throw std::runtime_error("Missing Physics export: ?QueryGeometry@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@VhkVector4f@@@@AEAU?$HkBufferReference@UHkTriangle@@@@@Z");
+    pQueryGeometry(args, outVertices, outTriangles);
+}
+
+void QueryLeaves(void * args, void * outColliders, void * outTriOrQuads) __asm__("\"?QueryLeaves$HkColliderQueryDispatcher$$SAXAEBUHkColliderQueryAABBArgs$1$AEAU?$HkBufferReference$UHkColliderLeafQueryColliderHit$HkColliderQueryDispatcher$$$$AEAU?$HkBufferReference$UHkColliderLeafQueryTriangleOrQuadHit$HkColliderQueryDispatcher$$$$$Z\"");
+void QueryLeaves(void * args, void * outColliders, void * outTriOrQuads)
+{
+    ensure_thread_info();
+    if (!pQueryLeaves)
+        throw std::runtime_error("Missing Physics export: ?QueryLeaves@HkColliderQueryDispatcher@@SAXAEBUHkColliderQueryAABBArgs@1@AEAU?$HkBufferReference@UHkColliderLeafQueryColliderHit@HkColliderQueryDispatcher@@@@AEAU?$HkBufferReference@UHkColliderLeafQueryTriangleOrQuadHit@HkColliderQueryDispatcher@@@@@Z");
+    pQueryLeaves(args, outColliders, outTriOrQuads);
+}
+
 void HkSimdTreeGridShape_RegisterFunctions(void) __asm__("\"?RegisterFunctions$HkSimdTreeGridShape$$SAXXZ\"");
 void HkSimdTreeGridShape_RegisterFunctions(void)
 {
@@ -7537,6 +7798,15 @@ void HkMaterialLibrary_Reset(void * instance)
     pHkMaterialLibrary_Reset(instance);
 }
 
+void RestoreBodiesMotionType(void * instance, void * return_value, void * world, void * bodyIds, int32_t count, void * properties, int32_t motionType) __asm__("\"?RestoreBodiesMotionType$HkSession$$QEAA?AUhknpMotionId$$AEAVhknpWorld$$PEBUhknpBodyId$$HPEAUhknpMotionProperties$$W4Enum$hknpMotionType$$$Z\"");
+void RestoreBodiesMotionType(void * instance, void * return_value, void * world, void * bodyIds, int32_t count, void * properties, int32_t motionType)
+{
+    ensure_thread_info();
+    if (!pRestoreBodiesMotionType)
+        throw std::runtime_error("Missing Physics export: ?RestoreBodiesMotionType@HkSession@@QEAA?AUhknpMotionId@@AEAVhknpWorld@@PEBUhknpBodyId@@HPEAUhknpMotionProperties@@W4Enum@hknpMotionType@@@Z");
+    pRestoreBodiesMotionType(instance, return_value, world, bodyIds, count, properties, motionType);
+}
+
 void SetAngle(void * constraint, float angle) __asm__("\"?SetAngle$HkConstraintHandler$$SAXPEBVhknpConstraint$$M$Z\"");
 void SetAngle(void * constraint, float angle)
 {
@@ -7580,6 +7850,15 @@ void SetBodiesInfo(void * update, int32_t count, void * filter)
     if (!pSetBodiesInfo)
         throw std::runtime_error("Missing Physics export: ?SetBodiesInfo@HkWorld@@SAXAEBUHkBodyInfoCollection@@HAEBUHkDataFilter@@@Z");
     pSetBodiesInfo(update, count, filter);
+}
+
+void SetBodiesMotion(void * world, void * bodyIds, int32_t count, uint32_t motionId) __asm__("\"?SetBodiesMotion$HkWorld$$SAXAEAVhknpWorld$$PEBUhknpBodyId$$HUhknpMotionId$$$Z\"");
+void SetBodiesMotion(void * world, void * bodyIds, int32_t count, uint32_t motionId)
+{
+    ensure_thread_info();
+    if (!pSetBodiesMotion)
+        throw std::runtime_error("Missing Physics export: ?SetBodiesMotion@HkWorld@@SAXAEAVhknpWorld@@PEBUhknpBodyId@@HUhknpMotionId@@@Z");
+    pSetBodiesMotion(world, bodyIds, count, motionId);
 }
 
 void SetBodiesMotionType(void * instance, void * return_value, void * world, void * bodyIds, int32_t count, void * properties, int32_t motionType) __asm__("\"?SetBodiesMotionType$HkSession$$QEAA?AUhknpMotionId$$AEAVhknpWorld$$PEAUhknpBodyId$$HPEAUhknpMotionProperties$$W4Enum$hknpMotionType$$$Z\"");
@@ -7700,6 +7979,15 @@ void SetColliderMassProperties(void * collider, void * massProperties)
     if (!pSetColliderMassProperties)
         throw std::runtime_error("Missing Physics export: ?SetColliderMassProperties@@YAXPEAVhknpShape@@AEAUhkDiagonalizedMassProperties@@@Z");
     pSetColliderMassProperties(collider, massProperties);
+}
+
+void SetCollisionEventsEnabled(void * instance, int32_t enable) __asm__("\"?SetCollisionEventsEnabled$HkRagdoll$$QEAAX_N$Z\"");
+void SetCollisionEventsEnabled(void * instance, int32_t enable)
+{
+    ensure_thread_info();
+    if (!pSetCollisionEventsEnabled)
+        throw std::runtime_error("Missing Physics export: ?SetCollisionEventsEnabled@HkRagdoll@@QEAAX_N@Z");
+    pSetCollisionEventsEnabled(instance, enable);
 }
 
 void SetConstraintGroupCinfo(void * instance, void * groupConfiguration) __asm__("\"?SetConstraintGroupCinfo$HkConstraintHandler$$QEBAXAEBVhknpConstraintGroupCinfo$$$Z\"");
@@ -7902,6 +8190,15 @@ void SetNotifyDeletion(void * collider, int32_t notify)
     pSetNotifyDeletion(collider, notify);
 }
 
+void SetPostProjectionEnabled(void * instance, int32_t enable) __asm__("\"?SetPostProjectionEnabled$HkRagdoll$$QEAAX_N$Z\"");
+void SetPostProjectionEnabled(void * instance, int32_t enable)
+{
+    ensure_thread_info();
+    if (!pSetPostProjectionEnabled)
+        throw std::runtime_error("Missing Physics export: ?SetPostProjectionEnabled@HkRagdoll@@QEAAX_N@Z");
+    pSetPostProjectionEnabled(instance, enable);
+}
+
 void SetProcessEnabled(void * instance, int32_t index, int32_t enabled) __asm__("\"?SetProcessEnabled$HkDebugProcessManager$$QEAAXH_N$Z\"");
 void SetProcessEnabled(void * instance, int32_t index, int32_t enabled)
 {
@@ -7947,6 +8244,15 @@ void SetStaticBodiesInfo(void * update, int32_t count)
     pSetStaticBodiesInfo(update, count);
 }
 
+void SetTargetPose(void * instance, void * modelLocalPose, int32_t count) __asm__("\"?SetTargetPose$HkRagdoll$$QEAAXPEBUHkPackedRelativeTransform$$H$Z\"");
+void SetTargetPose(void * instance, void * modelLocalPose, int32_t count)
+{
+    ensure_thread_info();
+    if (!pSetTargetPose)
+        throw std::runtime_error("Missing Physics export: ?SetTargetPose@HkRagdoll@@QEAAXPEBUHkPackedRelativeTransform@@H@Z");
+    pSetTargetPose(instance, modelLocalPose, count);
+}
+
 void SetUnbreached(void * instance) __asm__("\"?SetUnbreached$HkManifoldGroup$$QEAAXXZ\"");
 void SetUnbreached(void * instance)
 {
@@ -7972,6 +8278,15 @@ void StepCollide(void * instance, float time)
     if (!pStepCollide)
         throw std::runtime_error("Missing Physics export: ?StepCollide@HkSession@@QEAAXM@Z");
     pStepCollide(instance, time);
+}
+
+void StepDebugDraw(void * instance, float time) __asm__("\"?StepDebugDraw$HkSession$$QEAAXM$Z\"");
+void StepDebugDraw(void * instance, float time)
+{
+    ensure_thread_info();
+    if (!pStepDebugDraw)
+        throw std::runtime_error("Missing Physics export: ?StepDebugDraw@HkSession@@QEAAXM@Z");
+    pStepDebugDraw(instance, time);
 }
 
 void StepSolve(void * instance, float time) __asm__("\"?StepSolve$HkSession$$QEAAXM$Z\"");
@@ -8185,15 +8500,6 @@ void HkMaterialLibrary_Update(void * instance, uint16_t id, void * configuration
     pHkMaterialLibrary_Update(instance, id, configuration);
 }
 
-void HkRagdoll_Update(void * instance, void * targetLocalTransforms, int32_t discontinuity, void * worldFromModel, float deltaTime) __asm__("\"?Update$HkRagdoll$$QEAAXAEAU?$HkBufferReference$VhkQsTransformf$$$$_NUHkPackedWorldTransform$$M$Z\"");
-void HkRagdoll_Update(void * instance, void * targetLocalTransforms, int32_t discontinuity, void * worldFromModel, float deltaTime)
-{
-    ensure_thread_info();
-    if (!pHkRagdoll_Update)
-        throw std::runtime_error("Missing Physics export: ?Update@HkRagdoll@@QEAAXAEAU?$HkBufferReference@VhkQsTransformf@@@@_NUHkPackedWorldTransform@@M@Z");
-    pHkRagdoll_Update(instance, targetLocalTransforms, discontinuity, worldFromModel, deltaTime);
-}
-
 void UpdateAndDraw(void * instance, float stepDelta) __asm__("\"?UpdateAndDraw$HkDebugProcessManager$$QEAAXM$Z\"");
 void UpdateAndDraw(void * instance, float stepDelta)
 {
@@ -8255,6 +8561,15 @@ void UpdateMotorsParameters(void * instance, void * params)
     if (!pUpdateMotorsParameters)
         throw std::runtime_error("Missing Physics export: ?UpdateMotorsParameters@HkRagdoll@@QEAAXAEBUHkPoweredMotorsParams@@@Z");
     pUpdateMotorsParameters(instance, params);
+}
+
+void UpdatePostProjectionSettings(void * instance, void * settings) __asm__("\"?UpdatePostProjectionSettings$HkRagdoll$$QEAAXAEBUHkPostProjectionUtilitySettings$$$Z\"");
+void UpdatePostProjectionSettings(void * instance, void * settings)
+{
+    ensure_thread_info();
+    if (!pUpdatePostProjectionSettings)
+        throw std::runtime_error("Missing Physics export: ?UpdatePostProjectionSettings@HkRagdoll@@QEAAXAEBUHkPostProjectionUtilitySettings@@@Z");
+    pUpdatePostProjectionSettings(instance, settings);
 }
 
 void HkVoxelShape_UpdateRange_updateData(void * instance, void * updateData) __asm__("\"?UpdateRange$HkVoxelShape$$QEAAXPEAX$Z\"");
@@ -14472,13 +14787,22 @@ void Global_dtor_void_5(void * instance)
     pGlobal_dtor_void_5(instance);
 }
 
-void * Global_ctor_void_18(void * instance) __asm__("\"HkPackedBodyProxy_HkPackedBodyProxy\"");
+void * Global_ctor_void_18(void * instance) __asm__("\"HkPackedBodyInfoExtended_HkPackedBodyInfoExtended\"");
 void * Global_ctor_void_18(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_18)
-        throw std::runtime_error("Missing Physics export: HkPackedBodyProxy_HkPackedBodyProxy");
+        throw std::runtime_error("Missing Physics export: HkPackedBodyInfoExtended_HkPackedBodyInfoExtended");
     return pGlobal_ctor_void_18(instance);
+}
+
+void * Global_ctor_void_19(void * instance) __asm__("\"HkPackedBodyProxy_HkPackedBodyProxy\"");
+void * Global_ctor_void_19(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_19)
+        throw std::runtime_error("Missing Physics export: HkPackedBodyProxy_HkPackedBodyProxy");
+    return pGlobal_ctor_void_19(instance);
 }
 
 void * Global_cctor_function_0_22(void * instance, void * function_0) __asm__("\"HkPackedCompoundShapeInstance_HkPackedCompoundShapeInstance___1__S_HkPackedCompoundShapeInstance\"");
@@ -14499,49 +14823,49 @@ void * Global_ctor_preciseTransform(void * instance, void * preciseTransform)
     return pGlobal_ctor_preciseTransform(instance, preciseTransform);
 }
 
-void * Global_ctor_void_19(void * instance) __asm__("\"HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings\"");
-void * Global_ctor_void_19(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_19)
-        throw std::runtime_error("Missing Physics export: HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings");
-    return pGlobal_ctor_void_19(instance);
-}
-
-void * Global_ctor_void_20(void * instance) __asm__("\"HkPoweredMotorsParams_HkPoweredMotorsParams\"");
+void * Global_ctor_void_20(void * instance) __asm__("\"HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings\"");
 void * Global_ctor_void_20(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_20)
-        throw std::runtime_error("Missing Physics export: HkPoweredMotorsParams_HkPoweredMotorsParams");
+        throw std::runtime_error("Missing Physics export: HkPostProjectionUtilitySettings_HkPostProjectionUtilitySettings");
     return pGlobal_ctor_void_20(instance);
 }
 
-void * Global_ctor_void_21(void * instance) __asm__("\"HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData\"");
+void * Global_ctor_void_21(void * instance) __asm__("\"HkPoweredMotorsParams_HkPoweredMotorsParams\"");
 void * Global_ctor_void_21(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_21)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData");
+        throw std::runtime_error("Missing Physics export: HkPoweredMotorsParams_HkPoweredMotorsParams");
     return pGlobal_ctor_void_21(instance);
 }
 
-void * Global_ctor_void_22(void * instance) __asm__("\"HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs\"");
+void * Global_ctor_void_22(void * instance) __asm__("\"HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData\"");
 void * Global_ctor_void_22(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_22)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkBodyWithUserData_HkBodyWithUserData");
     return pGlobal_ctor_void_22(instance);
 }
 
-void * Global_ctor_void_23(void * instance) __asm__("\"HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs\"");
+void * Global_ctor_void_23(void * instance) __asm__("\"HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs\"");
 void * Global_ctor_void_23(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_23)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkCastAabbArgs_HkCastAabbArgs");
     return pGlobal_ctor_void_23(instance);
+}
+
+void * Global_ctor_void_24(void * instance) __asm__("\"HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs\"");
+void * Global_ctor_void_24(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_24)
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs");
+    return pGlobal_ctor_void_24(instance);
 }
 
 void * Global_cctor_function_0_23(void * instance, void * function_0) __asm__("\"HkQueryDispatcher_S_HkCastShapeArgs_HkCastShapeArgs___1__S_HkQueryDispatcher_S_HkCastShapeArgs\"");
@@ -14562,22 +14886,22 @@ void * Global_cctor_function_0_24(void * instance, void * function_0)
     return pGlobal_cctor_function_0_24(instance, function_0);
 }
 
-void * Global_ctor_void_24(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs\"");
-void * Global_ctor_void_24(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_24)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs");
-    return pGlobal_ctor_void_24(instance);
-}
-
-void * Global_ctor_void_25(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs\"");
+void * Global_ctor_void_25(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs\"");
 void * Global_ctor_void_25(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_25)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestPointsToPointArgs_HkNearestPointsToPointArgs");
     return pGlobal_ctor_void_25(instance);
+}
+
+void * Global_ctor_void_26(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs\"");
+void * Global_ctor_void_26(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_26)
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs");
+    return pGlobal_ctor_void_26(instance);
 }
 
 void * Global_cctor_function_0_25(void * instance, void * function_0) __asm__("\"HkQueryDispatcher_S_HkNearestPointsToShapeArgs_HkNearestPointsToShapeArgs___1__S_HkQueryDispatcher_S_HkNearestPointsToShapeArgs\"");
@@ -14589,40 +14913,40 @@ void * Global_cctor_function_0_25(void * instance, void * function_0)
     return pGlobal_cctor_function_0_25(instance, function_0);
 }
 
-void * Global_ctor_void_26(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit\"");
-void * Global_ctor_void_26(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_26)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit");
-    return pGlobal_ctor_void_26(instance);
-}
-
-void * Global_ctor_void_27(void * instance) __asm__("\"HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs\"");
+void * Global_ctor_void_27(void * instance) __asm__("\"HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit\"");
 void * Global_ctor_void_27(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_27)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkNearestQueryHit_HkNearestQueryHit");
     return pGlobal_ctor_void_27(instance);
 }
 
-void * Global_ctor_void_28(void * instance) __asm__("\"HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs\"");
+void * Global_ctor_void_28(void * instance) __asm__("\"HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs\"");
 void * Global_ctor_void_28(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_28)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkQueryAabbArgs_HkQueryAabbArgs");
     return pGlobal_ctor_void_28(instance);
 }
 
-void * Global_ctor_void_29(void * instance) __asm__("\"HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit\"");
+void * Global_ctor_void_29(void * instance) __asm__("\"HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs\"");
 void * Global_ctor_void_29(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_29)
-        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit");
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkRayCastArgs_HkRayCastArgs");
     return pGlobal_ctor_void_29(instance);
+}
+
+void * Global_ctor_void_30(void * instance) __asm__("\"HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit\"");
+void * Global_ctor_void_30(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_30)
+        throw std::runtime_error("Missing Physics export: HkQueryDispatcher_S_HkSweepQueryHit_HkSweepQueryHit");
+    return pGlobal_ctor_void_30(instance);
 }
 
 void * Global_cctor_function_0_26(void * instance, void * function_0) __asm__("\"HkRagdollAsset_HkRagdollAsset___1__S_HkRagdollAsset\"");
@@ -14634,13 +14958,13 @@ void * Global_cctor_function_0_26(void * instance, void * function_0)
     return pGlobal_cctor_function_0_26(instance, function_0);
 }
 
-void * Global_ctor_void_30(void * instance) __asm__("\"HkRagdollCinfo_HkRagdollCinfo\"");
-void * Global_ctor_void_30(void * instance)
+void * Global_ctor_void_31(void * instance) __asm__("\"HkRagdollCinfo_HkRagdollCinfo\"");
+void * Global_ctor_void_31(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_30)
+    if (!pGlobal_ctor_void_31)
         throw std::runtime_error("Missing Physics export: HkRagdollCinfo_HkRagdollCinfo");
-    return pGlobal_ctor_void_30(instance);
+    return pGlobal_ctor_void_31(instance);
 }
 
 void * Global_cctor_function_0_27(void * instance, void * function_0) __asm__("\"HkRagdollCinfo_HkRagdollCinfo___1__S_HkRagdollCinfo\"");
@@ -14670,13 +14994,13 @@ void * Global_cctor_function_0_28(void * instance, void * function_0)
     return pGlobal_cctor_function_0_28(instance, function_0);
 }
 
-void * Global_ctor_void_31(void * instance) __asm__("\"HkSerializableFracture_HkSerializableFracture\"");
-void * Global_ctor_void_31(void * instance)
+void * Global_ctor_void_32(void * instance) __asm__("\"HkSerializableFracture_HkSerializableFracture\"");
+void * Global_ctor_void_32(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_31)
+    if (!pGlobal_ctor_void_32)
         throw std::runtime_error("Missing Physics export: HkSerializableFracture_HkSerializableFracture");
-    return pGlobal_ctor_void_31(instance);
+    return pGlobal_ctor_void_32(instance);
 }
 
 void * Global_cctor_function_0_29(void * instance, void * function_0) __asm__("\"HkSerializationShapeScalingUtil_HkSerializationShapeScalingUtil___1__S_HkSerializationShapeScalingUtil\"");
@@ -14688,13 +15012,13 @@ void * Global_cctor_function_0_29(void * instance, void * function_0)
     return pGlobal_cctor_function_0_29(instance, function_0);
 }
 
-void * Global_ctor_void_32(void * instance) __asm__("\"HkSession_U_HkLodSettings_HkLodSettings\"");
-void * Global_ctor_void_32(void * instance)
+void * Global_ctor_void_33(void * instance) __asm__("\"HkSession_U_HkLodSettings_HkLodSettings\"");
+void * Global_ctor_void_33(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_32)
+    if (!pGlobal_ctor_void_33)
         throw std::runtime_error("Missing Physics export: HkSession_U_HkLodSettings_HkLodSettings");
-    return pGlobal_ctor_void_32(instance);
+    return pGlobal_ctor_void_33(instance);
 }
 
 void * Global_ctor_other(void * instance, void * other) __asm__("\"HkSession_U_HkLodSettings_HkLodSettings__1__S_HkSession_U_HkLodSettings\"");
@@ -14706,13 +15030,13 @@ void * Global_ctor_other(void * instance, void * other)
     return pGlobal_ctor_other(instance, other);
 }
 
-void * Global_ctor_void_33(void * instance) __asm__("\"HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage\"");
-void * Global_ctor_void_33(void * instance)
+void * Global_ctor_void_34(void * instance) __asm__("\"HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage\"");
+void * Global_ctor_void_34(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_33)
+    if (!pGlobal_ctor_void_34)
         throw std::runtime_error("Missing Physics export: HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage");
-    return pGlobal_ctor_void_33(instance);
+    return pGlobal_ctor_void_34(instance);
 }
 
 void * Global_cctor_function_0_30(void * instance, void * function_0) __asm__("\"HkSimdTreeGridShapeStorage_HkSimdTreeGridShapeStorage___1__S_HkSimdTreeGridShapeStorage\"");
@@ -14724,31 +15048,31 @@ void * Global_cctor_function_0_30(void * instance, void * function_0)
     return pGlobal_cctor_function_0_30(instance, function_0);
 }
 
-void * Global_ctor_void_34(void * instance) __asm__("\"HkSimdTreeGridShape_S_Input_Input\"");
-void * Global_ctor_void_34(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_34)
-        throw std::runtime_error("Missing Physics export: HkSimdTreeGridShape_S_Input_Input");
-    return pGlobal_ctor_void_34(instance);
-}
-
-void * Global_ctor_void_35(void * instance) __asm__("\"HkSparseGridShape_S_Input_Input\"");
+void * Global_ctor_void_35(void * instance) __asm__("\"HkSimdTreeGridShape_S_Input_Input\"");
 void * Global_ctor_void_35(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_35)
-        throw std::runtime_error("Missing Physics export: HkSparseGridShape_S_Input_Input");
+        throw std::runtime_error("Missing Physics export: HkSimdTreeGridShape_S_Input_Input");
     return pGlobal_ctor_void_35(instance);
 }
 
-void * Global_ctor_void_36(void * instance) __asm__("\"HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate\"");
+void * Global_ctor_void_36(void * instance) __asm__("\"HkSparseGridShape_S_Input_Input\"");
 void * Global_ctor_void_36(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_36)
-        throw std::runtime_error("Missing Physics export: HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate");
+        throw std::runtime_error("Missing Physics export: HkSparseGridShape_S_Input_Input");
     return pGlobal_ctor_void_36(instance);
+}
+
+void * Global_ctor_void_37(void * instance) __asm__("\"HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate\"");
+void * Global_ctor_void_37(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_37)
+        throw std::runtime_error("Missing Physics export: HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate");
+    return pGlobal_ctor_void_37(instance);
 }
 
 void * Global_cctor_function_0_31(void * instance, void * function_0) __asm__("\"HkStaticBodyInfoUpdate_HkStaticBodyInfoUpdate___1__S_HkStaticBodyInfoUpdate\"");
@@ -14760,67 +15084,67 @@ void * Global_cctor_function_0_31(void * instance, void * function_0)
     return pGlobal_cctor_function_0_31(instance, function_0);
 }
 
-void * Global_ctor_void_37(void * instance) __asm__("\"HkStatistics_HkStatistics\"");
-void * Global_ctor_void_37(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_37)
-        throw std::runtime_error("Missing Physics export: HkStatistics_HkStatistics");
-    return pGlobal_ctor_void_37(instance);
-}
-
-void * Global_ctor_void_38(void * instance) __asm__("\"HkWorldData_HkWorldData\"");
+void * Global_ctor_void_38(void * instance) __asm__("\"HkStatistics_HkStatistics\"");
 void * Global_ctor_void_38(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_38)
-        throw std::runtime_error("Missing Physics export: HkWorldData_HkWorldData");
+        throw std::runtime_error("Missing Physics export: HkStatistics_HkStatistics");
     return pGlobal_ctor_void_38(instance);
 }
 
-void * Global_ctor_void_39(void * instance) __asm__("\"MassBuildConfig_MassBuildConfig\"");
+void * Global_ctor_void_39(void * instance) __asm__("\"HkWorldData_HkWorldData\"");
 void * Global_ctor_void_39(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_39)
-        throw std::runtime_error("Missing Physics export: MassBuildConfig_MassBuildConfig");
+        throw std::runtime_error("Missing Physics export: HkWorldData_HkWorldData");
     return pGlobal_ctor_void_39(instance);
 }
 
-void * Global_ctor_void_40(void * instance) __asm__("\"MeshShapeArgs_MeshShapeArgs\"");
+void * Global_ctor_void_40(void * instance) __asm__("\"MassBuildConfig_MassBuildConfig\"");
 void * Global_ctor_void_40(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_40)
-        throw std::runtime_error("Missing Physics export: MeshShapeArgs_MeshShapeArgs");
+        throw std::runtime_error("Missing Physics export: MassBuildConfig_MassBuildConfig");
     return pGlobal_ctor_void_40(instance);
 }
 
-void * Global_ctor_void_41(void * instance) __asm__("\"MigrationData_MigrationData\"");
+void * Global_ctor_void_41(void * instance) __asm__("\"MeshShapeArgs_MeshShapeArgs\"");
 void * Global_ctor_void_41(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_41)
-        throw std::runtime_error("Missing Physics export: MigrationData_MigrationData");
+        throw std::runtime_error("Missing Physics export: MeshShapeArgs_MeshShapeArgs");
     return pGlobal_ctor_void_41(instance);
 }
 
-void * Global_ctor_void_42(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_Config_Config\"");
+void * Global_ctor_void_42(void * instance) __asm__("\"MigrationData_MigrationData\"");
 void * Global_ctor_void_42(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_42)
-        throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_Config_Config");
+        throw std::runtime_error("Missing Physics export: MigrationData_MigrationData");
     return pGlobal_ctor_void_42(instance);
 }
 
-void * Global_ctor_void_43(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo\"");
+void * Global_ctor_void_43(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_Config_Config\"");
 void * Global_ctor_void_43(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_43)
-        throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo");
+        throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_Config_Config");
     return pGlobal_ctor_void_43(instance);
+}
+
+void * Global_ctor_void_44(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo\"");
+void * Global_ctor_void_44(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_44)
+        throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo");
+    return pGlobal_ctor_void_44(instance);
 }
 
 void * Global_cctor_function_0_32(void * instance, void * function_0) __asm__("\"c__N_hkConvexDecomposition_S_ConvexPieceInfo_ConvexPieceInfo___1__N_hkConvexDecomposition_S_ConvexPieceInfo\"");
@@ -14832,13 +15156,13 @@ void * Global_cctor_function_0_32(void * instance, void * function_0)
     return pGlobal_cctor_function_0_32(instance, function_0);
 }
 
-void * Global_ctor_void_44(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_IProgress_IProgress\"");
-void * Global_ctor_void_44(void * instance)
+void * Global_ctor_void_45(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_IProgress_IProgress\"");
+void * Global_ctor_void_45(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_44)
+    if (!pGlobal_ctor_void_45)
         throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_IProgress_IProgress");
-    return pGlobal_ctor_void_44(instance);
+    return pGlobal_ctor_void_45(instance);
 }
 
 void * Global_cctor_function_0_33(void * instance, void * function_0) __asm__("\"c__N_hkConvexDecomposition_S_IProgress_IProgress___1__N_hkConvexDecomposition_S_IProgress\"");
@@ -14850,13 +15174,13 @@ void * Global_cctor_function_0_33(void * instance, void * function_0)
     return pGlobal_cctor_function_0_33(instance, function_0);
 }
 
-void * Global_ctor_void_45(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo\"");
-void * Global_ctor_void_45(void * instance)
+void * Global_ctor_void_46(void * instance) __asm__("\"c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo\"");
+void * Global_ctor_void_46(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_45)
+    if (!pGlobal_ctor_void_46)
         throw std::runtime_error("Missing Physics export: c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo");
-    return pGlobal_ctor_void_45(instance);
+    return pGlobal_ctor_void_46(instance);
 }
 
 void * Global_cctor_function_0_34(void * instance, void * function_0) __asm__("\"c__N_hkConvexDecomposition_S_OutputInfo_OutputInfo___1__N_hkConvexDecomposition_S_OutputInfo\"");
@@ -14886,40 +15210,40 @@ void * Global_cctor_function_0_35(void * instance, void * function_0)
     return pGlobal_cctor_function_0_35(instance, function_0);
 }
 
-void * Global_ctor_void_46(void * instance) __asm__("\"hkQTransform_hkQTransform\"");
-void * Global_ctor_void_46(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_46)
-        throw std::runtime_error("Missing Physics export: hkQTransform_hkQTransform");
-    return pGlobal_ctor_void_46(instance);
-}
-
-void * Global_ctor_void_47(void * instance) __asm__("\"hkStringPtr_hkStringPtr\"");
+void * Global_ctor_void_47(void * instance) __asm__("\"hkQTransform_hkQTransform\"");
 void * Global_ctor_void_47(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_47)
-        throw std::runtime_error("Missing Physics export: hkStringPtr_hkStringPtr");
+        throw std::runtime_error("Missing Physics export: hkQTransform_hkQTransform");
     return pGlobal_ctor_void_47(instance);
 }
 
-void * Global_ctor_void_48(void * instance) __asm__("\"hknpBodyIdAndIndex_hknpBodyIdAndIndex\"");
+void * Global_ctor_void_48(void * instance) __asm__("\"hkStringPtr_hkStringPtr\"");
 void * Global_ctor_void_48(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_48)
-        throw std::runtime_error("Missing Physics export: hknpBodyIdAndIndex_hknpBodyIdAndIndex");
+        throw std::runtime_error("Missing Physics export: hkStringPtr_hkStringPtr");
     return pGlobal_ctor_void_48(instance);
 }
 
-void * Global_ctor_void_49(void * instance) __asm__("\"hknpBodyQualityId_hknpBodyQualityId\"");
+void * Global_ctor_void_49(void * instance) __asm__("\"hknpBodyIdAndIndex_hknpBodyIdAndIndex\"");
 void * Global_ctor_void_49(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_49)
-        throw std::runtime_error("Missing Physics export: hknpBodyQualityId_hknpBodyQualityId");
+        throw std::runtime_error("Missing Physics export: hknpBodyIdAndIndex_hknpBodyIdAndIndex");
     return pGlobal_ctor_void_49(instance);
+}
+
+void * Global_ctor_void_50(void * instance) __asm__("\"hknpBodyQualityId_hknpBodyQualityId\"");
+void * Global_ctor_void_50(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_50)
+        throw std::runtime_error("Missing Physics export: hknpBodyQualityId_hknpBodyQualityId");
+    return pGlobal_ctor_void_50(instance);
 }
 
 void * Global_ctor_i(void * instance, int32_t i) __asm__("\"hknpBodyQualityId_hknpBodyQualityId_I\"");
@@ -14949,40 +15273,40 @@ void Global_dtor_void_8(void * instance)
     pGlobal_dtor_void_8(instance);
 }
 
-void * Global_ctor_void_50(void * instance) __asm__("\"hknpBody_hknpBody\"");
-void * Global_ctor_void_50(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_50)
-        throw std::runtime_error("Missing Physics export: hknpBody_hknpBody");
-    return pGlobal_ctor_void_50(instance);
-}
-
-void * Global_ctor_void_51(void * instance) __asm__("\"hknpCompressedAabbThresholds_hknpCompressedAabbThresholds\"");
+void * Global_ctor_void_51(void * instance) __asm__("\"hknpBody_hknpBody\"");
 void * Global_ctor_void_51(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_51)
-        throw std::runtime_error("Missing Physics export: hknpCompressedAabbThresholds_hknpCompressedAabbThresholds");
+        throw std::runtime_error("Missing Physics export: hknpBody_hknpBody");
     return pGlobal_ctor_void_51(instance);
 }
 
-void * Global_ctor_void_52(void * instance) __asm__("\"hknpConnectivityGraph_S_Buffer_Buffer\"");
+void * Global_ctor_void_52(void * instance) __asm__("\"hknpCompressedAabbThresholds_hknpCompressedAabbThresholds\"");
 void * Global_ctor_void_52(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_52)
-        throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_Buffer_Buffer");
+        throw std::runtime_error("Missing Physics export: hknpCompressedAabbThresholds_hknpCompressedAabbThresholds");
     return pGlobal_ctor_void_52(instance);
 }
 
-void * Global_ctor_void_53(void * instance) __asm__("\"hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray\"");
+void * Global_ctor_void_53(void * instance) __asm__("\"hknpConnectivityGraph_S_Buffer_Buffer\"");
 void * Global_ctor_void_53(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_53)
-        throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray");
+        throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_Buffer_Buffer");
     return pGlobal_ctor_void_53(instance);
+}
+
+void * Global_ctor_void_54(void * instance) __asm__("\"hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray\"");
+void * Global_ctor_void_54(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_54)
+        throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_CompressedIntArray_CompressedIntArray");
+    return pGlobal_ctor_void_54(instance);
 }
 
 void Global_dtor_void_9(void * instance) __asm__("\"hknpConnectivityGraph_S_CompressedIntArray__CompressedIntArray\"");
@@ -14994,13 +15318,13 @@ void Global_dtor_void_9(void * instance)
     pGlobal_dtor_void_9(instance);
 }
 
-void * Global_ctor_void_54(void * instance) __asm__("\"hknpConnectivityGraph_S_DisjointInput_DisjointInput\"");
-void * Global_ctor_void_54(void * instance)
+void * Global_ctor_void_55(void * instance) __asm__("\"hknpConnectivityGraph_S_DisjointInput_DisjointInput\"");
+void * Global_ctor_void_55(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_54)
+    if (!pGlobal_ctor_void_55)
         throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_DisjointInput_DisjointInput");
-    return pGlobal_ctor_void_54(instance);
+    return pGlobal_ctor_void_55(instance);
 }
 
 void * Global_ctor_buffer(void * instance, void * buffer) __asm__("\"hknpConnectivityGraph_S_DisjointResult_DisjointResult___1__S_hknpConnectivityGraph_S_Buffer\"");
@@ -15021,13 +15345,13 @@ void * Global_cctor_1_function_0_5(void * instance, void * function_0)
     return pGlobal_cctor_1_function_0_5(instance, function_0);
 }
 
-void * Global_ctor_void_55(void * instance) __asm__("\"hknpConnectivityGraph_S_DisjointResult_S_Set_Set\"");
-void * Global_ctor_void_55(void * instance)
+void * Global_ctor_void_56(void * instance) __asm__("\"hknpConnectivityGraph_S_DisjointResult_S_Set_Set\"");
+void * Global_ctor_void_56(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_55)
+    if (!pGlobal_ctor_void_56)
         throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_DisjointResult_S_Set_Set");
-    return pGlobal_ctor_void_55(instance);
+    return pGlobal_ctor_void_56(instance);
 }
 
 void * Global_cctor_function_0_36(void * instance, void * function_0) __asm__("\"hknpConnectivityGraph_S_DisjointResult_S_Set_Set___1__S_hknpConnectivityGraph_S_DisjointResult_S_Set\"");
@@ -15057,13 +15381,13 @@ void Global_dtor_void_11(void * instance)
     pGlobal_dtor_void_11(instance);
 }
 
-void * Global_ctor_void_56(void * instance) __asm__("\"hknpConnectivityGraph_S_Edge_Edge\"");
-void * Global_ctor_void_56(void * instance)
+void * Global_ctor_void_57(void * instance) __asm__("\"hknpConnectivityGraph_S_Edge_Edge\"");
+void * Global_ctor_void_57(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_56)
+    if (!pGlobal_ctor_void_57)
         throw std::runtime_error("Missing Physics export: hknpConnectivityGraph_S_Edge_Edge");
-    return pGlobal_ctor_void_56(instance);
+    return pGlobal_ctor_void_57(instance);
 }
 
 void * Global_cctor_function_0_37(void * instance, void * function_0) __asm__("\"hknpConnectivityGraph_S_LocalBuffer_LocalBuffer___1__S_hknpConnectivityGraph_S_LocalBuffer\"");
@@ -15084,22 +15408,22 @@ void Global_dtor_void_12(void * instance)
     pGlobal_dtor_void_12(instance);
 }
 
-void * Global_ctor_void_57(void * instance) __asm__("\"hknpConstraintData_S_AppliedImpulses_AppliedImpulses\"");
-void * Global_ctor_void_57(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_57)
-        throw std::runtime_error("Missing Physics export: hknpConstraintData_S_AppliedImpulses_AppliedImpulses");
-    return pGlobal_ctor_void_57(instance);
-}
-
-void * Global_ctor_void_58(void * instance) __asm__("\"hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse\"");
+void * Global_ctor_void_58(void * instance) __asm__("\"hknpConstraintData_S_AppliedImpulses_AppliedImpulses\"");
 void * Global_ctor_void_58(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_58)
-        throw std::runtime_error("Missing Physics export: hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse");
+        throw std::runtime_error("Missing Physics export: hknpConstraintData_S_AppliedImpulses_AppliedImpulses");
     return pGlobal_ctor_void_58(instance);
+}
+
+void * Global_ctor_void_59(void * instance) __asm__("\"hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse\"");
+void * Global_ctor_void_59(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_59)
+        throw std::runtime_error("Missing Physics export: hknpConstraintData_S_AppliedImpulses_S_Impulse_Impulse");
+    return pGlobal_ctor_void_59(instance);
 }
 
 void * Global_ctor_type_mutability(void * instance, int32_t type, int32_t mutability) __asm__("\"hknpConstraintData_hknpConstraintData___S_hknpConstraintData_E_ConstraintType___S_hknpConstraintData_E_Mutability\"");
@@ -15111,13 +15435,13 @@ void * Global_ctor_type_mutability(void * instance, int32_t type, int32_t mutabi
     return pGlobal_ctor_type_mutability(instance, type, mutability);
 }
 
-void * Global_ctor_void_59(void * instance) __asm__("\"hknpConstraintGroupDirectSolverSettings_hknpConstraintGroupDirectSolverSettings\"");
-void * Global_ctor_void_59(void * instance)
+void * Global_ctor_void_60(void * instance) __asm__("\"hknpConstraintGroupDirectSolverSettings_hknpConstraintGroupDirectSolverSettings\"");
+void * Global_ctor_void_60(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_59)
+    if (!pGlobal_ctor_void_60)
         throw std::runtime_error("Missing Physics export: hknpConstraintGroupDirectSolverSettings_hknpConstraintGroupDirectSolverSettings");
-    return pGlobal_ctor_void_59(instance);
+    return pGlobal_ctor_void_60(instance);
 }
 
 void Global_dtor_void_13(void * instance) __asm__("\"hknpConstraint__hknpConstraint\"");
@@ -15129,22 +15453,22 @@ void Global_dtor_void_13(void * instance)
     pGlobal_dtor_void_13(instance);
 }
 
-void * Global_ctor_void_60(void * instance) __asm__("\"hknpConstraint_hknpConstraint\"");
-void * Global_ctor_void_60(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_60)
-        throw std::runtime_error("Missing Physics export: hknpConstraint_hknpConstraint");
-    return pGlobal_ctor_void_60(instance);
-}
-
-void * Global_ctor_void_61(void * instance) __asm__("\"hknpMaterialPalette_hknpMaterialPalette\"");
+void * Global_ctor_void_61(void * instance) __asm__("\"hknpConstraint_hknpConstraint\"");
 void * Global_ctor_void_61(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_61)
-        throw std::runtime_error("Missing Physics export: hknpMaterialPalette_hknpMaterialPalette");
+        throw std::runtime_error("Missing Physics export: hknpConstraint_hknpConstraint");
     return pGlobal_ctor_void_61(instance);
+}
+
+void * Global_ctor_void_62(void * instance) __asm__("\"hknpMaterialPalette_hknpMaterialPalette\"");
+void * Global_ctor_void_62(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_62)
+        throw std::runtime_error("Missing Physics export: hknpMaterialPalette_hknpMaterialPalette");
+    return pGlobal_ctor_void_62(instance);
 }
 
 void Global_dtor_void_14(void * instance) __asm__("\"hknpMaterial__hknpMaterial\"");
@@ -15156,13 +15480,13 @@ void Global_dtor_void_14(void * instance)
     pGlobal_dtor_void_14(instance);
 }
 
-void * Global_ctor_void_62(void * instance) __asm__("\"hknpMotion_hknpMotion\"");
-void * Global_ctor_void_62(void * instance)
+void * Global_ctor_void_63(void * instance) __asm__("\"hknpMotion_hknpMotion\"");
+void * Global_ctor_void_63(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_62)
+    if (!pGlobal_ctor_void_63)
         throw std::runtime_error("Missing Physics export: hknpMotion_hknpMotion");
-    return pGlobal_ctor_void_62(instance);
+    return pGlobal_ctor_void_63(instance);
 }
 
 void * Global_cctor_other_3(void * instance, void * other) __asm__("\"hknpMotion_hknpMotion___1__S_hknpMotion\"");
@@ -15174,13 +15498,13 @@ void * Global_cctor_other_3(void * instance, void * other)
     return pGlobal_cctor_other_3(instance, other);
 }
 
-void * Global_ctor_void_63(void * instance) __asm__("\"hknpRefMaterial_hknpRefMaterial\"");
-void * Global_ctor_void_63(void * instance)
+void * Global_ctor_void_64(void * instance) __asm__("\"hknpRefMaterial_hknpRefMaterial\"");
+void * Global_ctor_void_64(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_63)
+    if (!pGlobal_ctor_void_64)
         throw std::runtime_error("Missing Physics export: hknpRefMaterial_hknpRefMaterial");
-    return pGlobal_ctor_void_63(instance);
+    return pGlobal_ctor_void_64(instance);
 }
 
 void * Global_cctor_function_0_38(void * instance, void * function_0) __asm__("\"hknpRefMaterial_hknpRefMaterial___1__S_hknpRefMaterial\"");
@@ -15192,13 +15516,13 @@ void * Global_cctor_function_0_38(void * instance, void * function_0)
     return pGlobal_cctor_function_0_38(instance, function_0);
 }
 
-void * Global_ctor_void_64(void * instance) __asm__("\"hknpShapeInstance_hknpShapeInstance\"");
-void * Global_ctor_void_64(void * instance)
+void * Global_ctor_void_65(void * instance) __asm__("\"hknpShapeInstance_hknpShapeInstance\"");
+void * Global_ctor_void_65(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_64)
+    if (!pGlobal_ctor_void_65)
         throw std::runtime_error("Missing Physics export: hknpShapeInstance_hknpShapeInstance");
-    return pGlobal_ctor_void_64(instance);
+    return pGlobal_ctor_void_65(instance);
 }
 
 void * Global_ctor_shape_transform(void * instance, void * shape, void * transform) __asm__("\"hknpShapeInstance_hknpShapeInstance__1__S_hknpShape___1__S_hkQTransform\"");
@@ -15219,22 +15543,22 @@ void * Global_cctor_other_4(void * instance, void * other)
     return pGlobal_cctor_other_4(instance, other);
 }
 
-void * Global_ctor_void_65(void * instance) __asm__("\"hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig\"");
-void * Global_ctor_void_65(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_65)
-        throw std::runtime_error("Missing Physics export: hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig");
-    return pGlobal_ctor_void_65(instance);
-}
-
-void * Global_ctor_void_66(void * instance) __asm__("\"hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig\"");
+void * Global_ctor_void_66(void * instance) __asm__("\"hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig\"");
 void * Global_ctor_void_66(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_66)
-        throw std::runtime_error("Missing Physics export: hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig");
+        throw std::runtime_error("Missing Physics export: hknpShape_S_BuildSurfaceGeometryConfig_BuildSurfaceGeometryConfig");
     return pGlobal_ctor_void_66(instance);
+}
+
+void * Global_ctor_void_67(void * instance) __asm__("\"hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig\"");
+void * Global_ctor_void_67(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_67)
+        throw std::runtime_error("Missing Physics export: hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig");
+    return pGlobal_ctor_void_67(instance);
 }
 
 void * Global_ctor_level(void * instance, uint8_t level) __asm__("\"hknpShape_S_GetShapeKeysConfig_GetShapeKeysConfig___E_hknpLevelOfDetail\"");
@@ -15255,13 +15579,13 @@ void * Global_cctor_function_0_39(void * instance, void * function_0)
     return pGlobal_cctor_function_0_39(instance, function_0);
 }
 
-void * Global_ctor_void_67(void * instance) __asm__("\"hknpShape_S_SdfContactPointOutput_SdfContactPointOutput\"");
-void * Global_ctor_void_67(void * instance)
+void * Global_ctor_void_68(void * instance) __asm__("\"hknpShape_S_SdfContactPointOutput_SdfContactPointOutput\"");
+void * Global_ctor_void_68(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_67)
+    if (!pGlobal_ctor_void_68)
         throw std::runtime_error("Missing Physics export: hknpShape_S_SdfContactPointOutput_SdfContactPointOutput");
-    return pGlobal_ctor_void_67(instance);
+    return pGlobal_ctor_void_68(instance);
 }
 
 void Global_dtor_void_15(void * instance) __asm__("\"hknpShape_S_SdfContactPointOutput__SdfContactPointOutput\"");
@@ -15273,22 +15597,22 @@ void Global_dtor_void_15(void * instance)
     pGlobal_dtor_void_15(instance);
 }
 
-void * Global_ctor_void_68(void * instance) __asm__("\"hknpShape_S_SdfContactPoint_SdfContactPoint\"");
-void * Global_ctor_void_68(void * instance)
-{
-    ensure_thread_info();
-    if (!pGlobal_ctor_void_68)
-        throw std::runtime_error("Missing Physics export: hknpShape_S_SdfContactPoint_SdfContactPoint");
-    return pGlobal_ctor_void_68(instance);
-}
-
-void * Global_ctor_void_69(void * instance) __asm__("\"hknpShape_S_SurfaceGeometry_SurfaceGeometry\"");
+void * Global_ctor_void_69(void * instance) __asm__("\"hknpShape_S_SdfContactPoint_SdfContactPoint\"");
 void * Global_ctor_void_69(void * instance)
 {
     ensure_thread_info();
     if (!pGlobal_ctor_void_69)
-        throw std::runtime_error("Missing Physics export: hknpShape_S_SurfaceGeometry_SurfaceGeometry");
+        throw std::runtime_error("Missing Physics export: hknpShape_S_SdfContactPoint_SdfContactPoint");
     return pGlobal_ctor_void_69(instance);
+}
+
+void * Global_ctor_void_70(void * instance) __asm__("\"hknpShape_S_SurfaceGeometry_SurfaceGeometry\"");
+void * Global_ctor_void_70(void * instance)
+{
+    ensure_thread_info();
+    if (!pGlobal_ctor_void_70)
+        throw std::runtime_error("Missing Physics export: hknpShape_S_SurfaceGeometry_SurfaceGeometry");
+    return pGlobal_ctor_void_70(instance);
 }
 
 void * Global_cctor_function_0_40(void * instance, void * function_0) __asm__("\"hknpShape_S_SurfaceGeometry_SurfaceGeometry___1__S_hknpShape_S_SurfaceGeometry\"");
@@ -15363,13 +15687,13 @@ void * Global_cctor_1_function_0_6(void * instance, void * function_0)
     return pGlobal_cctor_1_function_0_6(instance, function_0);
 }
 
-void * Global_ctor_void_70(void * instance) __asm__("\"vrShapeKey_vrShapeKey\"");
-void * Global_ctor_void_70(void * instance)
+void * Global_ctor_void_71(void * instance) __asm__("\"vrShapeKey_vrShapeKey\"");
+void * Global_ctor_void_71(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_70)
+    if (!pGlobal_ctor_void_71)
         throw std::runtime_error("Missing Physics export: vrShapeKey_vrShapeKey");
-    return pGlobal_ctor_void_70(instance);
+    return pGlobal_ctor_void_71(instance);
 }
 
 void * Global_ctor_value(void * instance, uint64_t value) __asm__("\"vrShapeKey_vrShapeKey_k\"");
@@ -15381,13 +15705,13 @@ void * Global_ctor_value(void * instance, uint64_t value)
     return pGlobal_ctor_value(instance, value);
 }
 
-void * Global_ctor_void_71(void * instance) __asm__("\"vrTriggerEventInfo_vrTriggerEventInfo\"");
-void * Global_ctor_void_71(void * instance)
+void * Global_ctor_void_72(void * instance) __asm__("\"vrTriggerEventInfo_vrTriggerEventInfo\"");
+void * Global_ctor_void_72(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_71)
+    if (!pGlobal_ctor_void_72)
         throw std::runtime_error("Missing Physics export: vrTriggerEventInfo_vrTriggerEventInfo");
-    return pGlobal_ctor_void_71(instance);
+    return pGlobal_ctor_void_72(instance);
 }
 
 void Global_dtor_void_17(void * instance) __asm__("\"vrTriggerManager__vrTriggerManager\"");
@@ -15399,13 +15723,13 @@ void Global_dtor_void_17(void * instance)
     pGlobal_dtor_void_17(instance);
 }
 
-void * Global_ctor_void_72(void * instance) __asm__("\"vrTriggerManager_vrTriggerManager\"");
-void * Global_ctor_void_72(void * instance)
+void * Global_ctor_void_73(void * instance) __asm__("\"vrTriggerManager_vrTriggerManager\"");
+void * Global_ctor_void_73(void * instance)
 {
     ensure_thread_info();
-    if (!pGlobal_ctor_void_72)
+    if (!pGlobal_ctor_void_73)
         throw std::runtime_error("Missing Physics export: vrTriggerManager_vrTriggerManager");
-    return pGlobal_ctor_void_72(instance);
+    return pGlobal_ctor_void_73(instance);
 }
 
 void * Global_cctor_function_0_44(void * instance, void * function_0) __asm__("\"vrTriggerManager_vrTriggerManager___1__S_vrTriggerManager\"");
