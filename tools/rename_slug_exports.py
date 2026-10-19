@@ -9,5 +9,5 @@ if len(sys.argv) != 2:
 path = sys.argv[1]
 renamed = rewrite_exports(
     path, lambda name: name.replace(b"$", b"@") if b"$Slug$Terathon$$" in name else None)
-if renamed != 13:
-    raise SystemExit(f"expected 13 Slug exports, found {renamed}")
+if renamed != 14:
+    raise SystemExit(f"expected 14 Slug exports, found {renamed}")

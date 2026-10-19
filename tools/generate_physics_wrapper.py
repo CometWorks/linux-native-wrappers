@@ -2,6 +2,7 @@
 """Generate VRage.Physics.Native forwarders from decompiled P/Invokes."""
 
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -22,6 +23,8 @@ SET_DELETION = "?SetColliderDeletionCallback@@YAXP6AXPEBVhknpShape@@@Z@Z"
 CREATE_DEBUG_DRAW = "?CreateDebugDrawSystem@HkSession@@QEAAPEAVHkDebugProcessManager@@AEBUDebugDrawImplementationTable@@PEAX@Z"
 CREATE_CHARACTER = "?Create@HkCharacterController@@SAPEAV1@AEBUHkCharacterControllerCinfo@@@Z"
 SESSION_CTOR = "??0HkSession@@QEAA@AEBUHkSessionCinfo@0@@Z"
+# Overwritten from the decompiled HkSessionCinfo layout when run on a game version.
+session_cinfo_size = 112
 SESSION_DTOR = "??1HkSession@@QEAA@XZ"
 ALLOCATE_WORLD = "?AllocateWorld@HkSession@@QEAAAEAVhknpWorld@@_NAEBVhkVector4d@@1H@Z"
 RELEASE_WORLD = "?ReleaseWorld@HkSession@@QEAAXAEAVhknpWorld@@@Z"
@@ -338,7 +341,7 @@ def emit(signatures):
         first = names[0] if names else None
         if entry_point == SESSION_CTOR:
             lines += [
-                "    alignas(void *) uint8_t cinfo[96];",
+                f"    alignas(void *) uint8_t cinfo[{session_cinfo_size}];",
                 f"    std::memcpy(cinfo, {names[1]}, sizeof(cinfo));",
                 "    void *callback = *reinterpret_cast<void **>(cinfo);",
                 "    if (callback)",
@@ -431,8 +434,19 @@ def emit(signatures):
     return "\n".join(lines), "\n".join(manifest) + "\n"
 
 
+def load_session_cinfo_size(root):
+    """The session constructor copies HkSessionCinfo, which grows between game versions."""
+    pattern = re.compile(r"struct HkSessionCinfo\s*\{\s*\[StructLayout\(LayoutKind\.Explicit, Size = (\d+)\)\]")
+    for path in Path(root).rglob("HkSession.cs"):
+        match = pattern.search(path.read_text(encoding="utf-8", errors="replace"))
+        if match:
+            return int(match.group(1))
+    raise SystemExit("HkSessionCinfo layout not found in the decompiled sources")
+
+
 if __name__ == "__main__":
     declarations = load_generator_declarations("VRage.Physics", "VRage.Physics.Native.dll")
+    session_cinfo_size = load_session_cinfo_size(sys.argv[1])
     source, manifest = emit(load_signatures(declarations))
     OUTPUT.write_text(source, encoding="utf-8")
     MANIFEST.write_text(manifest, encoding="utf-8")

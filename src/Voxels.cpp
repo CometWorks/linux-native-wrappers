@@ -211,6 +211,8 @@ using VrVoxelMesh_Recycle_t = void(WINAPI *)(void *, Vector3I *, Vector3I *, int
 VrVoxelMesh_Recycle_t pVrVoxelMesh_Recycle;
 using VrVoxelMesh_Release_t = void(WINAPI *)(void *);
 VrVoxelMesh_Release_t pVrVoxelMesh_Release;
+using VrVoxels_GetTotalAllocatedBytes_t = int64_t(WINAPI *)(void);
+VrVoxels_GetTotalAllocatedBytes_t pVrVoxels_GetTotalAllocatedBytes;
 
 void initialize(const char *dll_path, const char *sidecar_path)
 {
@@ -450,6 +452,9 @@ void initialize(const char *dll_path, const char *sidecar_path)
         pVrVoxelMesh_Release = reinterpret_cast<VrVoxelMesh_Release_t>(get_export("VrVoxelMesh_Release"));
         if (!pVrVoxelMesh_Release)
             throw std::runtime_error("Missing Voxels export: VrVoxelMesh_Release");
+        pVrVoxels_GetTotalAllocatedBytes = reinterpret_cast<VrVoxels_GetTotalAllocatedBytes_t>(get_export("VrVoxels_GetTotalAllocatedBytes"));
+        if (!pVrVoxels_GetTotalAllocatedBytes)
+            throw std::runtime_error("Missing Voxels export: VrVoxels_GetTotalAllocatedBytes");
     });
 }
 }
@@ -960,6 +965,12 @@ void VrVoxelMesh_Release(void * instance)
 {
     ensure_thread_info();
     pVrVoxelMesh_Release(instance);
+}
+
+int64_t VrVoxels_GetTotalAllocatedBytes(void)
+{
+    ensure_thread_info();
+    return pVrVoxels_GetTotalAllocatedBytes();
 }
 
 }

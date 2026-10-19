@@ -30,6 +30,7 @@ Function load_export(const char *name)
 
 using SetDefaultLayoutDataFunction = void(WINAPI *)(void *);
 using GetFontKeyDataFunction = void *(WINAPI *)(void *, unsigned int);
+using GetNontextureDataSizeFunction = unsigned int(WINAPI *)(const void *);
 using ExtractTextureFunction = void(WINAPI *)(void *, void *);
 using MeasureSlugExFunction = float(WINAPI *)(int, void *, void *, void *, void *, int, int,
                                               unsigned int *, float *, void *, void *);
@@ -47,6 +48,7 @@ using BuildSlugExFunction = void(WINAPI *)(int, void *, void *, void *, void *, 
 
 SetDefaultLayoutDataFunction set_default_layout_data;
 GetFontKeyDataFunction get_font_key_data;
+GetNontextureDataSizeFunction get_nontexture_data_size;
 ExtractTextureFunction extract_curve_texture;
 ExtractTextureFunction extract_band_texture;
 MeasureSlugExFunction measure_slug_ex;
@@ -72,6 +74,7 @@ void initialize(const char *dll_path, const char *sidecar_path)
 
     set_default_layout_data = load_export<SetDefaultLayoutDataFunction>("?SetDefaultLayoutData@Slug@Terathon@@YAXPEAULayoutData@12@@Z");
     get_font_key_data = load_export<GetFontKeyDataFunction>("?GetFontKeyData@Slug@Terathon@@YAPEBXPEBUFontHeader@12@I@Z");
+    get_nontexture_data_size = load_export<GetNontextureDataSizeFunction>("?GetNontextureDataSize@Slug@Terathon@@YAIPEBUSlugFileHeader@12@@Z");
     extract_curve_texture = load_export<ExtractTextureFunction>("?ExtractCurveTexture@Slug@Terathon@@YAXPEBUSlugFileHeader@12@PEAX@Z");
     extract_band_texture = load_export<ExtractTextureFunction>("?ExtractBandTexture@Slug@Terathon@@YAXPEBUSlugFileHeader@12@PEAX@Z");
     measure_slug_ex = load_export<MeasureSlugExFunction>("?MeasureSlugEx@Slug@Terathon@@YAMHPEBUFontDesc@12@PEBUFontMap@12@PEBULayoutData@12@PEBDHHPEBIPEAMPEAU512@PEAUCompiledStorage@12@@Z");
@@ -97,6 +100,7 @@ void Init(const char *dll_path, const char *sidecar_path)
 
 void SetDefaultLayoutData(void *data) SLUG_EXPORT("?SetDefaultLayoutData$Slug$Terathon$$YAXPEAULayoutData$12$$Z");
 void *GetFontKeyData(void *header, unsigned int key) SLUG_EXPORT("?GetFontKeyData$Slug$Terathon$$YAPEBXPEBUFontHeader$12$I$Z");
+unsigned int GetNontextureDataSize(const void *header) SLUG_EXPORT("?GetNontextureDataSize$Slug$Terathon$$YAIPEBUSlugFileHeader$12$$Z");
 void ExtractCurveTexture(void *header, void *texture) SLUG_EXPORT("?ExtractCurveTexture$Slug$Terathon$$YAXPEBUSlugFileHeader$12$PEAX$Z");
 void ExtractBandTexture(void *header, void *texture) SLUG_EXPORT("?ExtractBandTexture$Slug$Terathon$$YAXPEBUSlugFileHeader$12$PEAX$Z");
 float MeasureSlugEx(int font_count, void *font_desc, void *font_map, void *layout_data, void *text,
@@ -134,6 +138,7 @@ void SetDefaultLayoutData(void *data)
     set_default_layout_data(data);
 }
 void *GetFontKeyData(void *header, unsigned int key) { ensure_thread_info(); return get_font_key_data(header, key); }
+unsigned int GetNontextureDataSize(const void *header) { ensure_thread_info(); return get_nontexture_data_size(header); }
 void ExtractCurveTexture(void *header, void *texture) { ensure_thread_info(); extract_curve_texture(header, texture); }
 void ExtractBandTexture(void *header, void *texture) { ensure_thread_info(); extract_band_texture(header, texture); }
 float MeasureSlugEx(int font_count, void *font_desc, void *font_map, void *layout_data, void *text,

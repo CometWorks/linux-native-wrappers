@@ -16,6 +16,7 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
@@ -31,6 +32,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <linux/futex.h>
 #include <linux/ntsync.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -2154,6 +2156,13 @@ WINAPI short crt__fdtest(float *px) {
     return -1;                     // _FINITE
 }
 WINAPI float crt_acosf(float x) { return std::acos(x); }
+// Wide formatted output only reaches Havok's diagnostic reports. The format string is written
+// as-is (UTF-16 narrowed to UTF-8) without substituting arguments.
+WINAPI int crt___stdio_common_vfwprintf(uint64_t options, FILE *stream, const WCHAR *format, void *locale, va_list args) {
+    if (!stream || !format) return -1;
+    std::string text = narrow_utf16_string(format);
+    return std::fputs(text.c_str(), stream) < 0 ? -1 : static_cast<int>(text.size());
+}
 
 // msvcrt.dll stubs for d3dcompiler_47.dll
 
@@ -2814,6 +2823,42 @@ WINAPI DWORD GetFullPathNameW(const WCHAR *lpFileName, DWORD nBufferLength, WCHA
     return static_cast<DWORD>(len);
 }
 WINAPI void Sleep(DWORD dwMilliseconds) { usleep(dwMilliseconds * 1000); }
+WINAPI DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable) { usleep(dwMilliseconds * 1000); return 0; }
+// CreateThread starts threads right away, so a suspended thread is already running.
+WINAPI DWORD ResumeThread(HANDLE hThread) { return 1; }
+WINAPI BOOL SetThreadPriority(HANDLE hThread, int nPriority) { return TRUE; }
+WINAPI ULONG_PTR SetThreadAffinityMask(HANDLE hThread, ULONG_PTR dwThreadAffinityMask) { return ~ULONG_PTR{0}; }
+WINAPI DWORD QueueUserAPC(void *pfnAPC, HANDLE hThread, ULONG_PTR dwData) { return 0; }
+WINAPI UINT GetErrorMode() { return 0; }
+WINAPI UINT SetErrorMode(UINT uMode) { return 0; }
+WINAPI HMODULE LoadLibraryW(const WCHAR *lpLibFileName) { return nullptr; }
+WINAPI BOOL CancelIo(HANDLE hFile) { return TRUE; }
+WINAPI BOOL ReadDirectoryChangesW(HANDLE hDirectory, void *lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, DWORD *lpBytesReturned, void *lpOverlapped, void *lpCompletionRoutine) { return FALSE; }
+WINAPI HANDLE FindFirstFileExW(const WCHAR *lpFileName, int fInfoLevelId, void *lpFindFileData, int fSearchOp, void *lpSearchFilter, DWORD dwAdditionalFlags) { return INVALID_HANDLE_VALUE; }
+WINAPI BOOL GetComputerNameW(WCHAR *lpBuffer, DWORD *nSize) {
+    char name[256] = {};
+    if (!lpBuffer || !nSize || gethostname(name, sizeof(name) - 1) != 0) return FALSE;
+    DWORD len = static_cast<DWORD>(std::strlen(name));
+    if (*nSize <= len) { *nSize = len + 1; return FALSE; }
+    for (DWORD i = 0; i <= len; i++) lpBuffer[i] = static_cast<unsigned char>(name[i]);
+    *nSize = len;
+    return TRUE;
+}
+WINAPI BOOL CopyFileW(const WCHAR *lpExistingFileName, const WCHAR *lpNewFileName, BOOL bFailIfExists) {
+    std::error_code ec;
+    auto options = bFailIfExists ? std::filesystem::copy_options::none : std::filesystem::copy_options::overwrite_existing;
+    return std::filesystem::copy_file(wide_to_string(lpExistingFileName), wide_to_string(lpNewFileName), options, ec) ? TRUE : FALSE;
+}
+WINAPI BOOL MoveFileExW(const WCHAR *lpExistingFileName, const WCHAR *lpNewFileName, DWORD dwFlags) {
+    std::error_code ec;
+    if (!lpNewFileName) return std::filesystem::remove(wide_to_string(lpExistingFileName), ec) ? TRUE : FALSE;
+    std::filesystem::rename(wide_to_string(lpExistingFileName), wide_to_string(lpNewFileName), ec);
+    return ec ? FALSE : TRUE;
+}
+WINAPI BOOL RemoveDirectoryW(const WCHAR *lpPathName) {
+    std::error_code ec;
+    return std::filesystem::remove(wide_to_string(lpPathName), ec) ? TRUE : FALSE;
+}
 WINAPI int LCMapStringW(DWORD Locale, DWORD dwMapFlags, const WCHAR *lpSrcStr, int cchSrc, WCHAR *lpDestStr, int cchDest) {
     if (!lpSrcStr) return 0;
     int len = cchSrc >= 0 ? cchSrc : 0;
@@ -2985,6 +3030,7 @@ WINAPI uint32_t ws2_32_ntohs(uint32_t netshort) { return ntohs(static_cast<uint1
 WINAPI int ws2_32_recv(uintptr_t s, char *buf, int len, int flags) { return recv(static_cast<int>(s), buf, len, flags); }
 WINAPI int ws2_32_select(int nfds, void *readfds, void *writefds, void *exceptfds, void *timeout) { return select(nfds, static_cast<fd_set *>(readfds), static_cast<fd_set *>(writefds), static_cast<fd_set *>(exceptfds), static_cast<timeval *>(timeout)); }
 WINAPI int ws2_32_send(uintptr_t s, const char *buf, int len, int flags) { return send(static_cast<int>(s), buf, len, flags); }
+WINAPI int ws2_32_WSASend(uintptr_t s, void *buffers, DWORD buffer_count, DWORD *bytes_sent, DWORD flags, void *overlapped, void *completion) { return -1; }
 WINAPI int ws2_32_setsockopt(uintptr_t s, int level, int optname, const char *optval, int optlen) { return setsockopt(static_cast<int>(s), level, optname, optval, static_cast<socklen_t>(optlen)); }
 WINAPI int ws2_32_gethostname(char *name, int namelen) { return gethostname(name, namelen); }
 WINAPI int ws2_32___WSAFDIsSet(uintptr_t fd, void *set) { return FD_ISSET(static_cast<int>(fd), static_cast<fd_set *>(set)); }
@@ -2993,6 +3039,404 @@ WINAPI int ws2_32_getaddrinfo(const char *node, const char *service, const struc
 WINAPI void ws2_32_freeaddrinfo(struct addrinfo *res) { freeaddrinfo(res); }
 WINAPI int ws2_32_inet_pton(int af, const char *src, void *dst) { return inet_pton(af, src, dst); }
 WINAPI const char *ws2_32_inet_ntop(int af, const void *src, char *dst, uint32_t size) { return inet_ntop(af, src, dst, size); }
+// ---------------------------------------------------------------------------
+// Kythera (SE2 VRage.KytheraV2.Native.dll and its Kythera_*.dll imports)
+// ---------------------------------------------------------------------------
+
+struct SYSTEMTIME {
+    WORD wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds;
+};
+
+WINAPI PVOID AddVectoredExceptionHandler(ULONG first, PVOID handler) {
+    // DUMMY: exceptions in PE code abort the process anyway.
+    (void)first;
+    return handler;
+}
+
+WINAPI ULONG RemoveVectoredExceptionHandler(PVOID handle) {
+    (void)handle;
+    return 1;
+}
+
+WINAPI void GetLocalTime(SYSTEMTIME *time) {
+    timespec now{};
+    clock_gettime(CLOCK_REALTIME, &now);
+    tm local{};
+    localtime_r(&now.tv_sec, &local);
+    *time = {
+        static_cast<WORD>(local.tm_year + 1900), static_cast<WORD>(local.tm_mon + 1),
+        static_cast<WORD>(local.tm_wday), static_cast<WORD>(local.tm_mday),
+        static_cast<WORD>(local.tm_hour), static_cast<WORD>(local.tm_min),
+        static_cast<WORD>(local.tm_sec), static_cast<WORD>(now.tv_nsec / 1000000),
+    };
+}
+
+WINAPI USHORT RtlCaptureStackBackTrace(ULONG skip, ULONG count, PVOID *frames, PULONG hash) {
+    // DUMMY: only used for diagnostics.
+    (void)skip;
+    (void)count;
+    (void)frames;
+    if (hash)
+        *hash = 0;
+    return 0;
+}
+
+WINAPI HRESULT SetThreadDescription(HANDLE thread, LPCWSTR description) {
+    (void)thread;
+    (void)description;
+    return 0;
+}
+
+WINAPI BOOL GetModuleHandleExA(DWORD flags, const char *name, HMODULE *module) {
+    // DUMMY, like GetModuleHandleW; used to name the module in diagnostics.
+    (void)flags;
+    (void)name;
+    if (!module)
+        return FALSE;
+    *module = reinterpret_cast<HMODULE>(1);
+    return TRUE;
+}
+
+WINAPI BOOL SwitchToThread() {
+    sched_yield();
+    return TRUE;
+}
+
+WINAPI DWORD WaitForMultipleObjects(DWORD count, const HANDLE *handles, BOOL wait_all,
+                                    DWORD milliseconds) {
+    if (wait_all) {
+        // Waiting one by one is not atomic, which only matters for auto-reset
+        // events and semaphores; joining threads is what this is used for.
+        for (DWORD i = 0; i < count; ++i)
+            if (WaitForSingleObjectEx(handles[i], milliseconds, FALSE) != STATUS_WAIT_0)
+                return STATUS_TIMEOUT;
+        return STATUS_WAIT_0;
+    }
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+    for (;;) {
+        for (DWORD i = 0; i < count; ++i)
+            if (WaitForSingleObjectEx(handles[i], 0, FALSE) == STATUS_WAIT_0)
+                return STATUS_WAIT_0 + i;
+        if (milliseconds != 0xffffffffu && std::chrono::steady_clock::now() >= deadline)
+            return STATUS_TIMEOUT;
+        usleep(1000);
+    }
+}
+
+WINAPI PVOID ole32_CoTaskMemAlloc(SIZE_T size) {
+    // Plain malloc: .NET frees these buffers with Marshal.FreeCoTaskMem, which is free().
+    return malloc(size);
+}
+
+WINAPI void ole32_CoTaskMemFree(PVOID ptr) { free(ptr); }
+
+// DUMMY: no symbol information, callers fall back to raw addresses.
+WINAPI DWORD dbghelp_SymSetOptions(DWORD options) { return options; }
+WINAPI BOOL dbghelp_SymInitialize(HANDLE process, const char *path, BOOL invade) { return FALSE; }
+WINAPI BOOL dbghelp_SymCleanup(HANDLE process) { return TRUE; }
+WINAPI BOOL dbghelp_SymFromAddr(HANDLE process, uint64_t address, uint64_t *displacement, void *symbol) { return FALSE; }
+WINAPI BOOL dbghelp_SymGetLineFromAddr64(HANDLE process, uint64_t address, DWORD *displacement, void *line) { return FALSE; }
+
+// MSVCP140 std::mutex and std::condition_variable. The STL headers construct
+// these objects in place (a constexpr std::mutex never calls
+// _Mtx_init_in_situ), so the shims keep the layout of the MSVC STL's
+// _Mtx_internal_imp_t and _Cnd_internal_imp_t and use their SRWLOCK and
+// CONDITION_VARIABLE words as futexes.
+struct msvc_mutex {
+    int type;
+    void *unused;
+    std::atomic<uint32_t> lock; // 0 free, 1 locked, 2 locked with waiters
+    uint32_t lock_high;
+    int32_t thread_id;
+    int count;
+};
+static_assert(offsetof(msvc_mutex, lock) == 16 && offsetof(msvc_mutex, thread_id) == 24 &&
+              offsetof(msvc_mutex, count) == 28);
+
+struct msvc_condition {
+    void *unused;
+    std::atomic<uint32_t> sequence;
+};
+
+static constexpr int MSVC_MTX_RECURSIVE = 0x100;
+static constexpr int MSVC_THRD_SUCCESS = 0;
+static constexpr int MSVC_THRD_BUSY = 3;
+
+static void futex_wait(std::atomic<uint32_t> *word, uint32_t value) {
+    syscall(SYS_futex, word, FUTEX_WAIT_PRIVATE, value, nullptr, nullptr, 0);
+}
+
+static void futex_wake(std::atomic<uint32_t> *word, int count) {
+    syscall(SYS_futex, word, FUTEX_WAKE_PRIVATE, count, nullptr, nullptr, 0);
+}
+
+static void msvc_mutex_acquire(msvc_mutex *mutex) {
+    uint32_t state = 0;
+    if (mutex->lock.compare_exchange_strong(state, 1))
+        return;
+    if (state != 2)
+        state = mutex->lock.exchange(2);
+    while (state != 0) {
+        futex_wait(&mutex->lock, 2);
+        state = mutex->lock.exchange(2);
+    }
+}
+
+static void msvc_mutex_release(msvc_mutex *mutex) {
+    if (mutex->lock.exchange(0) == 2)
+        futex_wake(&mutex->lock, 1);
+}
+
+WINAPI void msvcp__Mtx_init_in_situ(msvc_mutex *mutex, int type) {
+    mutex->type = type;
+    mutex->unused = nullptr;
+    mutex->lock.store(0);
+    mutex->lock_high = 0;
+    mutex->thread_id = -1;
+    mutex->count = 0;
+}
+
+WINAPI void msvcp__Mtx_destroy_in_situ(msvc_mutex *mutex) { (void)mutex; }
+
+WINAPI int msvcp__Mtx_lock(msvc_mutex *mutex) {
+    auto self = static_cast<int32_t>(GetCurrentThreadId());
+    if (mutex->thread_id == self) {
+        if (!(mutex->type & MSVC_MTX_RECURSIVE))
+            return MSVC_THRD_BUSY;
+    } else {
+        msvc_mutex_acquire(mutex);
+        mutex->thread_id = self;
+    }
+    ++mutex->count;
+    return MSVC_THRD_SUCCESS;
+}
+
+WINAPI int msvcp__Mtx_trylock(msvc_mutex *mutex) {
+    auto self = static_cast<int32_t>(GetCurrentThreadId());
+    if (mutex->thread_id == self) {
+        if (!(mutex->type & MSVC_MTX_RECURSIVE))
+            return MSVC_THRD_BUSY;
+    } else {
+        uint32_t state = 0;
+        if (!mutex->lock.compare_exchange_strong(state, 1))
+            return MSVC_THRD_BUSY;
+        mutex->thread_id = self;
+    }
+    ++mutex->count;
+    return MSVC_THRD_SUCCESS;
+}
+
+WINAPI int msvcp__Mtx_unlock(msvc_mutex *mutex) {
+    if (--mutex->count == 0) {
+        mutex->thread_id = -1;
+        msvc_mutex_release(mutex);
+    }
+    return MSVC_THRD_SUCCESS;
+}
+
+WINAPI void msvcp__Cnd_init_in_situ(msvc_condition *condition) {
+    condition->unused = nullptr;
+    condition->sequence.store(0);
+}
+
+WINAPI void msvcp__Cnd_destroy_in_situ(msvc_condition *condition) { (void)condition; }
+
+WINAPI int msvcp__Cnd_wait(msvc_condition *condition, msvc_mutex *mutex) {
+    uint32_t sequence = condition->sequence.load();
+    int count = mutex->count;
+    mutex->count = 0;
+    mutex->thread_id = -1;
+    msvc_mutex_release(mutex);
+    futex_wait(&condition->sequence, sequence);
+    msvc_mutex_acquire(mutex);
+    mutex->thread_id = static_cast<int32_t>(GetCurrentThreadId());
+    mutex->count = count;
+    return MSVC_THRD_SUCCESS;
+}
+
+WINAPI int msvcp__Cnd_broadcast(msvc_condition *condition) {
+    condition->sequence.fetch_add(1);
+    futex_wake(&condition->sequence, INT_MAX);
+    return MSVC_THRD_SUCCESS;
+}
+
+WINAPI unsigned int msvcp__Thrd_id() { return GetCurrentThreadId(); }
+
+WINAPI long long msvcp__Query_perf_counter() {
+    LARGE_INTEGER value = 0;
+    QueryPerformanceCounter(&value);
+    return value;
+}
+
+WINAPI long long msvcp__Query_perf_frequency() {
+    LARGE_INTEGER value = 0;
+    QueryPerformanceFrequency(&value);
+    return value;
+}
+
+WINAPI void msvcp__Throw_C_error(int code) {
+    unsupported_msvc_exception("_Throw_C_error", static_cast<DWORD>(code));
+}
+
+// std::_Raise_handler is data: the import slot receives the variable's address.
+static void *msvcp_raise_handler;
+
+struct msvc_type_info_data {
+    const char *undecorated_name;
+    const char decorated_name[1];
+};
+
+WINAPI int vcruntime___std_type_info_compare(const msvc_type_info_data *lhs,
+                                             const msvc_type_info_data *rhs) {
+    if (lhs == rhs)
+        return 0;
+    return strcmp(lhs->decorated_name + 1, rhs->decorated_name + 1);
+}
+
+WINAPI short crt__fdclass(float x) {
+    switch (std::fpclassify(x)) {
+    case FP_INFINITE: return 1;
+    case FP_NAN: return 2;
+    case FP_NORMAL: return -1;
+    case FP_SUBNORMAL: return -2;
+    default: return 0;
+    }
+}
+
+WINAPI float crt_copysignf(float x, float y) { return std::copysign(x, y); }
+WINAPI float crt_nextafterf(float x, float y) { return std::nextafter(x, y); }
+WINAPI double crt_round(double x) { return std::round(x); }
+WINAPI float crt_sinf(float x) { return std::sin(x); }
+
+WINAPI void crt__invoke_watson(const WCHAR *, const WCHAR *, const WCHAR *, unsigned int, uintptr_t) {
+    unsupported_msvc_exception("_invoke_watson");
+}
+
+using msvc_terminate_handler = void (WINAPI *)();
+static msvc_terminate_handler crt_terminate_handler;
+
+WINAPI msvc_terminate_handler crt_set_terminate(msvc_terminate_handler handler) {
+    // Stored only; an MSVC terminate path aborts in the shims.
+    return std::exchange(crt_terminate_handler, handler);
+}
+
+WINAPI void *crt_signal(int signal, void *handler) {
+    // DUMMY: a Windows crash handler must not become a Linux signal handler.
+    (void)signal;
+    (void)handler;
+    return nullptr;
+}
+
+WINAPI FILE *crt___acrt_iob_func(unsigned int index) {
+    switch (index) {
+    case 0: return stdin;
+    case 1: return stdout;
+    default: return stderr;
+    }
+}
+
+WINAPI FILE *crt_fopen(const char *filename, const char *mode) {
+    // glibc ignores the MSVC-only mode letters (t, N, S, ...).
+    return fopen(filename, mode);
+}
+
+WINAPI int crt_fflush(FILE *stream) { return fflush(stream); }
+WINAPI int crt_fputs(const char *text, FILE *stream) { return fputs(text, stream); }
+
+WINAPI int crt_fopen_s(FILE **file, const char *filename, const char *mode) {
+    if (!file)
+        return EINVAL;
+    *file = fopen(filename, mode);
+    return *file ? 0 : errno;
+}
+
+// Widens byte by byte like MultiByteToWideChar above. Kythera converts
+// ASCII names and source paths with it.
+WINAPI int crt_mbstowcs_s(size_t *converted, WCHAR *buffer, size_t buffer_count,
+                          const char *source, size_t count) {
+    constexpr size_t truncate = SIZE_MAX;
+    if (!source)
+        return EINVAL;
+    size_t length = strnlen(source, count == truncate ? SIZE_MAX : count);
+    if (!buffer) {
+        if (converted)
+            *converted = length + 1;
+        return 0;
+    }
+    if (buffer_count == 0)
+        return EINVAL;
+    int result = 0;
+    if (length >= buffer_count) {
+        if (count != truncate) {
+            buffer[0] = 0;
+            if (converted)
+                *converted = 0;
+            return ERANGE;
+        }
+        length = buffer_count - 1;
+        result = 80; // STRUNCATE
+    }
+    for (size_t i = 0; i < length; ++i)
+        buffer[i] = static_cast<unsigned char>(source[i]);
+    buffer[length] = 0;
+    if (converted)
+        *converted = length + 1;
+    return result;
+}
+WINAPI int crt_fputc(int ch, FILE *stream) { return fputc(ch, stream); }
+
+static std::string format_ms_string(const char *format, ms_va_list args) {
+    int length = format_from_ms_va_list(nullptr, 0, format, args);
+    if (length <= 0)
+        return {};
+    std::string text(static_cast<size_t>(length) + 1, '\0');
+    format_from_ms_va_list(text.data(), text.size(), format, args);
+    text.resize(static_cast<size_t>(length));
+    return text;
+}
+
+WINAPI int crt___stdio_common_vfprintf(uint64_t options, FILE *stream, const char *format,
+                                       _locale_t locale, const void *args) {
+    (void)options;
+    (void)locale;
+    std::string text = format_ms_string(format, static_cast<ms_va_list>(args));
+    return static_cast<int>(fwrite(text.data(), 1, text.size(), stream));
+}
+
+WINAPI int crt___stdio_common_vswprintf_s(uint64_t options, WCHAR *buffer, size_t buffer_count,
+                                          const WCHAR *format, _locale_t locale,
+                                          const void *args) {
+    (void)options;
+    (void)locale;
+    if (!buffer || buffer_count == 0 || !format)
+        return -1;
+    // Narrow the format. In the legacy wide printf a bare %s or %c takes a
+    // wide argument and %S or %C a narrow one, the reverse of narrow printf.
+    std::string narrow_format;
+    for (const WCHAR *cursor = format; *cursor; ++cursor) {
+        narrow_format.push_back(static_cast<char>(*cursor));
+        if (*cursor != '%')
+            continue;
+        while (cursor[1] && strchr("-+ #0'*.0123456789", static_cast<char>(cursor[1])))
+            narrow_format.push_back(static_cast<char>(*++cursor));
+        if (cursor[1] == 's' || cursor[1] == 'c')
+            narrow_format.push_back('l');
+        else if (cursor[1] == 'S' || cursor[1] == 'C') {
+            narrow_format.push_back('h');
+            narrow_format.push_back(static_cast<char>(*++cursor + ('a' - 'A')));
+        }
+    }
+    std::string text = format_ms_string(narrow_format.c_str(), static_cast<ms_va_list>(args));
+    if (text.size() >= buffer_count) {
+        buffer[0] = 0;
+        return -1;
+    }
+    for (size_t i = 0; i < text.size(); ++i)
+        buffer[i] = static_cast<unsigned char>(text[i]);
+    buffer[text.size()] = 0;
+    return static_cast<int>(text.size());
+}
+
 // Registration
 
 #define KERNEL32_FUNC(name) register_function("KERNEL32.dll", #name, generic_func(&name));
@@ -3115,6 +3559,7 @@ void register_windows_library_functions() {
     CRT_FUNC(math, sqrtf);
     CRT_FUNC(math, log2f);
     CRT_FUNC(math, _fdtest);
+    CRT_FUNC(stdio, __stdio_common_vfwprintf);
     CRT_FUNC(math, acosf);
     CRT_FUNC(runtime, _invalid_parameter_noinfo_noreturn);
 
@@ -3339,6 +3784,21 @@ void register_windows_library_functions() {
     KERNEL32_FUNC(GetFullPathNameA);
     KERNEL32_FUNC(GetFullPathNameW);
     KERNEL32_FUNC(Sleep);
+    KERNEL32_FUNC(SleepEx);
+    KERNEL32_FUNC(ResumeThread);
+    KERNEL32_FUNC(SetThreadPriority);
+    KERNEL32_FUNC(SetThreadAffinityMask);
+    KERNEL32_FUNC(QueueUserAPC);
+    KERNEL32_FUNC(GetErrorMode);
+    KERNEL32_FUNC(SetErrorMode);
+    KERNEL32_FUNC(LoadLibraryW);
+    KERNEL32_FUNC(CancelIo);
+    KERNEL32_FUNC(ReadDirectoryChangesW);
+    KERNEL32_FUNC(FindFirstFileExW);
+    KERNEL32_FUNC(GetComputerNameW);
+    KERNEL32_FUNC(CopyFileW);
+    KERNEL32_FUNC(MoveFileExW);
+    KERNEL32_FUNC(RemoveDirectoryW);
     KERNEL32_FUNC(LCMapStringW);
     KERNEL32_FUNC(SetFileAttributesW);
     KERNEL32_FUNC(CopyFileExW);
@@ -3383,7 +3843,58 @@ void register_windows_library_functions() {
     register_function("WS2_32.dll", "recv", generic_func(&ws2_32_recv));
     register_function("WS2_32.dll", "select", generic_func(&ws2_32_select));
     register_function("WS2_32.dll", "send", generic_func(&ws2_32_send));
+    register_function("WS2_32.dll", "WSASend", generic_func(&ws2_32_WSASend));
     register_function("WS2_32.dll", "setsockopt", generic_func(&ws2_32_setsockopt));
     register_function("WS2_32.dll", "gethostname", generic_func(&ws2_32_gethostname));
     register_function("WS2_32.dll", "__WSAFDIsSet", generic_func(&ws2_32___WSAFDIsSet));
+
+    // Kythera
+    KERNEL32_FUNC(AddVectoredExceptionHandler);
+    KERNEL32_FUNC(RemoveVectoredExceptionHandler);
+    KERNEL32_FUNC(GetLocalTime);
+    KERNEL32_FUNC(RtlCaptureStackBackTrace);
+    KERNEL32_FUNC(SetThreadDescription);
+    KERNEL32_FUNC(SwitchToThread);
+    KERNEL32_FUNC(GetModuleHandleExA);
+    KERNEL32_FUNC(WaitForMultipleObjects);
+    register_function("ole32.dll", "CoTaskMemAlloc", generic_func(&ole32_CoTaskMemAlloc));
+    register_function("ole32.dll", "CoTaskMemFree", generic_func(&ole32_CoTaskMemFree));
+    register_function("dbghelp.dll", "SymSetOptions", generic_func(&dbghelp_SymSetOptions));
+    register_function("dbghelp.dll", "SymInitialize", generic_func(&dbghelp_SymInitialize));
+    register_function("dbghelp.dll", "SymCleanup", generic_func(&dbghelp_SymCleanup));
+    register_function("dbghelp.dll", "SymFromAddr", generic_func(&dbghelp_SymFromAddr));
+    register_function("dbghelp.dll", "SymGetLineFromAddr64", generic_func(&dbghelp_SymGetLineFromAddr64));
+    register_function("MSVCP140.dll", "_Mtx_init_in_situ", generic_func(&msvcp__Mtx_init_in_situ));
+    register_function("MSVCP140.dll", "_Mtx_destroy_in_situ", generic_func(&msvcp__Mtx_destroy_in_situ));
+    register_function("MSVCP140.dll", "_Mtx_lock", generic_func(&msvcp__Mtx_lock));
+    register_function("MSVCP140.dll", "_Mtx_trylock", generic_func(&msvcp__Mtx_trylock));
+    register_function("MSVCP140.dll", "_Mtx_unlock", generic_func(&msvcp__Mtx_unlock));
+    register_function("MSVCP140.dll", "_Cnd_init_in_situ", generic_func(&msvcp__Cnd_init_in_situ));
+    register_function("MSVCP140.dll", "_Cnd_destroy_in_situ", generic_func(&msvcp__Cnd_destroy_in_situ));
+    register_function("MSVCP140.dll", "_Cnd_wait", generic_func(&msvcp__Cnd_wait));
+    register_function("MSVCP140.dll", "_Cnd_broadcast", generic_func(&msvcp__Cnd_broadcast));
+    register_function("MSVCP140.dll", "_Thrd_id", generic_func(&msvcp__Thrd_id));
+    register_function("MSVCP140.dll", "_Query_perf_counter", generic_func(&msvcp__Query_perf_counter));
+    register_function("MSVCP140.dll", "_Query_perf_frequency", generic_func(&msvcp__Query_perf_frequency));
+    register_function("MSVCP140.dll", "?_Throw_C_error@std@@YAXH@Z", generic_func(&msvcp__Throw_C_error));
+    register_function("MSVCP140.dll", "?_Raise_handler@std@@3P6AXAEBVexception@stdext@@@ZEA",
+                      reinterpret_cast<generic_func>(&msvcp_raise_handler));
+    VCRUNTIME140_FUNC(__std_type_info_compare);
+    CRT_FUNC(math, _fdclass);
+    CRT_FUNC(math, copysignf);
+    CRT_FUNC(math, nextafterf);
+    CRT_FUNC(math, round);
+    CRT_FUNC(math, sinf);
+    CRT_FUNC(runtime, _invoke_watson);
+    CRT_FUNC(runtime, set_terminate);
+    CRT_FUNC(runtime, signal);
+    CRT_FUNC(stdio, __acrt_iob_func);
+    CRT_FUNC(stdio, fopen);
+    CRT_FUNC(stdio, fflush);
+    CRT_FUNC(stdio, fputc);
+    CRT_FUNC(stdio, fputs);
+    CRT_FUNC(stdio, fopen_s);
+    register_function("api-ms-win-crt-convert-l1-1-0.dll", "mbstowcs_s", generic_func(&crt_mbstowcs_s));
+    CRT_FUNC(stdio, __stdio_common_vfprintf);
+    CRT_FUNC(stdio, __stdio_common_vswprintf_s);
 }
