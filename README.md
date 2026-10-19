@@ -278,7 +278,9 @@ because the planet shape reads a thread-local variable of the DLL.
 `KytheraCore`, builds a ground navmesh on a test quad and queries a path on it,
 then updates a surface agent while GS points at another TEB, as it does after a
 Physics or Slug call on the same thread. Navmesh tiles build on background
-threads that call `KytV2_DoBackgroundWork` when the bridge asks for work. It fails on any unknown or ordinal import.
+threads that call `KytV2_DoBackgroundWork` when the bridge asks for work. A
+last thread exits with GS on a foreign TEB, which the bridge's thread detach
+callbacks must survive. It fails on any unknown or ordinal import.
 
 The Havok crash harness can also be run directly:
 

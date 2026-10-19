@@ -392,6 +392,10 @@ void pe_cleanup_current_thread()
     if (!ctx || ctx->cleaning_up)
         return;
     ctx->cleaning_up = true;
+    // GS may still point at the TEB of another wrapper library that ran on this
+    // thread last; its TLS array has no slots for our images, and their detach
+    // callbacks read TLS.
+    syscall(__NR_arch_prctl, ARCH_SET_GS, &ctx->thread_environment);
     // Windows order (LdrShutdownThread): DLL_THREAD_DETACH notifications run
     // first, then FLS callbacks drain — detach handlers must still see their
     // FLS values. The drain also catches values installed during detach.

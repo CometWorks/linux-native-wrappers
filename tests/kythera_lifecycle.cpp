@@ -209,6 +209,13 @@ int main(int argc, char **argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     KytV2_DestroySurfaceAgent(agent);
+
+    // A pool thread that called Kythera and then another wrapper exits with GS
+    // on the foreign TEB; the bridge's DLL_THREAD_DETACH callbacks read TLS.
+    std::thread([] {
+        KytV2_SetMaxJobThreads(2);
+        point_gs_at_foreign_teb();
+    }).join();
     KytV2_DestroySurfaceNavMesh(surface_navmesh);
 
     // KytheraCore.Dispose
