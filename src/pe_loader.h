@@ -419,6 +419,7 @@ struct user_desc {
 // Loader's representation of a loaded PE image
 struct pe_image {
     const char *name;
+    const char *sidecar_path;
     DllEntry_t entry;
     void *image;
     void *sidecar_handle;
