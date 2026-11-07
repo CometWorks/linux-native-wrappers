@@ -348,6 +348,7 @@ their own matching symbols; wrapper DWARF does not supply those.
 
 ## License
 
-The project is MIT licensed; see [LICENSE](LICENSE). The bundled Linux ntsync
+The project is licensed under AGPL-3.0; see [LICENSE](LICENSE). Code from before
+2026-11-07 was MIT licensed, see [LICENSE-MIT](LICENSE-MIT). The bundled Linux ntsync
 UAPI header in `src/linux/ntsync.h` carries its own
 `GPL-2.0 WITH Linux-syscall-note` SPDX identifier.
