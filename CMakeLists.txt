@@ -282,6 +282,12 @@ if(BUILD_TESTING)
         add_test(NAME d3dcompiler_forward_include
                 COMMAND d3dcompiler_forward_include_test "${BIN64}/d3dcompiler_47.dll")
         set_tests_properties(d3dcompiler_forward_include PROPERTIES TIMEOUT 60)
+
+        # Game 1.211.017's compiler has version 2 unwind info (epilog codes)
+        add_test(NAME pe_sidecar_d3dcompiler
+                COMMAND generate_pe_sidecar
+                        "${BIN64}/d3dcompiler_47.dll"
+                        "${CMAKE_BINARY_DIR}/generated-d3dcompiler_47.dll")
     endif()
 
     if(BIN64 AND EXISTS "${BIN64}/RecastDetour.dll")

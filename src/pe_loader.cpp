@@ -609,6 +609,11 @@ static int process_import_descriptor(void *image, IMAGE_IMPORT_DESCRIPTOR *diren
         } else {
             auto *symname = RVA2VA(image, (lookup_tbl[i] & ~IMAGE_ORDINAL_FLAG) + 2, char *);
             auto adr = get_export(symname, dll);
+            // UCRT's api-ms-win-crt-private _o_* exports are the plain CRT functions
+            // under another name (d3dcompiler_47.dll of SE1 1.211.017 imports them).
+            if (!adr && strncasecmp(dll, "api-ms-win-crt-private-", 23) == 0 &&
+                strncmp(symname, "_o_", 3) == 0)
+                adr = get_export(symname + 3);
             if (!adr) {
                 LogMessageA("Unknown symbol: %s:%s", dll, symname);
                 address_tbl[i] = reinterpret_cast<ULONG_PTR>(unknown_symbol_stub);

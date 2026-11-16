@@ -338,7 +338,9 @@ ParsedPe parse_pe(const char *path)
         uint8_t flags = version_flags >> 3;
         uint8_t frame_register = frame & 15;
         uint32_t frame_offset = static_cast<uint32_t>(frame >> 4) * 16;
-        if (version != 1)
+        // Version 2 adds UWOP_EPILOG codes (MSVC /d2epilogunwind), which describe epilogs
+        // only; the prolog codes after them are the same as in version 1.
+        if (version != 1 && version != 2)
             throw std::runtime_error("unsupported UNWIND_INFO version " + std::to_string(version) +
                                      " at RVA " + hex_value(rva));
         if ((flags & ~7U) || ((flags & 4) && (flags & 3)))
@@ -360,14 +362,20 @@ ParsedPe parse_pe(const char *path)
             uint8_t encoded = result.image[rva + 5 + slot * 2];
             uint8_t opcode = encoded & 15;
             uint8_t info = encoded >> 4;
+            if (version == 2 && opcode == 6) {
+                // UWOP_EPILOG, one slot each, ahead of the prolog codes. Its code offset is an
+                // epilog size or position, not a prolog offset.
+                slot += 1;
+                continue;
+            }
             if (code_offset > prolog_size || (!code_offset && !(flags & 4)))
                 throw std::runtime_error("invalid unwind code offset " + std::to_string(code_offset) +
                                          " at RVA " + hex_value(rva));
             unsigned operands = 0;
             Operation operation{code_offset, OpKind::Alloc, 0, 0};
             if (opcode == 0) {
-                if (!nonvolatile(info))
-                    throw std::runtime_error("PUSH_NONVOL uses volatile register at RVA " + hex_value(rva));
+                // Despite the name, any register can be pushed: game 1.211.017's
+                // d3dcompiler_47.dll has thunks that push RAX, RCX, RDX, R8 and R9.
                 operation = {code_offset, OpKind::Push, register_map[info], 0};
             } else if (opcode == 1) {
                 uint32_t size;
