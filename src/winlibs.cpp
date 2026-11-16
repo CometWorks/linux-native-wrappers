@@ -2480,6 +2480,41 @@ WINAPI int msvcrt__wsopen(const WCHAR *filename, int oflag, int shflag, ...) {
     std::string fname_utf8(fname.begin(), fname.end());
     return open(fname_utf8.c_str(), oflag, 0666);
 }
+// UCRT functions the d3dcompiler_47.dll of game 1.211.017 imports with no msvcrt.dll
+// counterpart above. Its api-ms-win-crt-private _o_* imports map to the plain names
+// in pe_loader.cpp.
+WINAPI int *crt__errno() { return &errno; }
+WINAPI void crt__invalid_parameter_noinfo() {
+    // The CRT function that calls this sets errno and returns its error value.
+    fprintf(stderr, "CRT: invalid parameter\n");
+}
+WINAPI long long crt__filelengthi64(int fd) {
+    struct stat st;
+    return fstat(fd, &st) == 0 ? static_cast<long long>(st.st_size) : -1;
+}
+WINAPI int crt__wsopen_s(int *fd, const WCHAR *filename, int oflag, int shflag, int pmode) {
+    if (!fd)
+        return EINVAL;
+    *fd = -1;
+    if (!filename)
+        return errno = EINVAL;
+    // Windows _O_* bits: RDONLY/WRONLY/RDWR in the low two, APPEND 0x8, CREAT 0x100,
+    // TRUNC 0x200, EXCL 0x400; text/binary and sharing modes don't apply here.
+    int flags = (oflag & 3) | O_CLOEXEC;
+    if (oflag & 0x8) flags |= O_APPEND;
+    if (oflag & 0x100) flags |= O_CREAT;
+    if (oflag & 0x200) flags |= O_TRUNC;
+    if (oflag & 0x400) flags |= O_EXCL;
+    int result = open(narrow_utf16_string(filename).c_str(), flags, 0666);
+    if (result < 0)
+        return errno;
+    *fd = result;
+    return 0;
+}
+WINAPI int crt__wtoi(const WCHAR *str) {
+    return str ? std::atoi(narrow_utf16_string(str).c_str()) : 0;
+}
+WINAPI int crt___isascii(int ch) { return static_cast<unsigned>(ch) < 0x80; }
 WINAPI double msvcrt_acos(double x) { return std::acos(x); }
 WINAPI double msvcrt_asin(double x) { return std::asin(x); }
 WINAPI double msvcrt_atan(double x) { return std::atan(x); }
@@ -3543,6 +3578,12 @@ void register_windows_library_functions() {
     CRT_FUNC(stdio, __stdio_common_vsnprintf_s);
     CRT_FUNC(runtime, _seh_filter_dll);
     CRT_FUNC(runtime, _cexit);
+    CRT_FUNC(runtime, _errno);
+    CRT_FUNC(runtime, _invalid_parameter_noinfo);
+    CRT_FUNC(stdio, _filelengthi64);
+    CRT_FUNC(stdio, _wsopen_s);
+    CRT_FUNC(convert, _wtoi);
+    CRT_FUNC(string, __isascii);
     CRT_FUNC(runtime, _crt_atexit);
     CRT_FUNC(runtime, _execute_onexit_table);
     CRT_FUNC(runtime, _register_onexit_function);
